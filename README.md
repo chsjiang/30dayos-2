@@ -1,5 +1,6 @@
 30dayos
 =======
 
-some files created with the 30dayOS book.
-some are assenbmly, others are C.
+Source files created with the 30dayOS book.
+Some files are assenbmly, others are C.
+
