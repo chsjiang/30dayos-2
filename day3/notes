@@ -1,2 +1,6 @@
 Today we created an ipl that actually loads a system file, Makefile will create a img based on ipl and .sys, on day2 the ipl itself pints "hello world" but this is not the usually as ipl only has 512 bytes and should only load the .sys
 the .sys should be the place to print or do other stuff
+the ipl only loads 10 cylinders, therefore caled ipl10.nas
+asmhead.nas is the place to inject c code, naskfunc.nas defines a function io_hlt(void) to call assemly code HLT to halt CPU
+actuall c code to be executed is fairly simpl, it's just calling the halt function define din naskfunc
+note to genearete a .sys to be executed after ipl, we are actually create a binary from asmhead.nas and another binary from bootpack.c, then just concatenate the two, see deatails in Makefile
