@@ -1,0 +1,1 @@
+Today we created a Initial Program Loader(ipl) that loads nothing and prints "hello world" upon startup, the Makefile creates an ipl which is compiled from an assembly program
