@@ -1,0 +1,2 @@
+today we created a simple palette and use CPU IO to define a customized color map, then we use pointer in C to write the color to particular pixels to the screen
+note we just need to specify which color number to be written(0x00-0x0f, 16 colors written in the code), and define each number means what in palette. Setting palette needs to do graphics card IO, which can only be achieved by assembly, we add regarding functions in naskfunc.nas 
