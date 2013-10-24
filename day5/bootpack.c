@@ -1,3 +1,4 @@
+#include <stdio.h>
 /* declare there's another function defined in other place (naskfunc.obj) */
 
 void io_hlt(void);
@@ -12,6 +13,9 @@ void set_palette(int, int, unsigned char*);
 void boxfill8(unsigned char*, int, unsigned char, int x0, int y0, int x1, int y1);
 void init_screen(char *vram, int xsize, int ysize);
 void putfont8(char *vram, int xsize, int x, int y, char color, char *font);
+void putfont8_asc(char *vram, int xsize, int x, int y, char color, unsigned char *s);
+void init_mouse_cursor8(char *mouse, char backgroudcolor);
+void putblock8_8( char *vram, int vxisze, int pxsize, int pysize, int px0, int py0, char *buf, int bxsize);
 
 #define COL8_000000		0
 #define COL8_FF0000		1
@@ -50,9 +54,14 @@ void HariMain(void)
 	
 	struct BOOTINFO *binfo;
 	
-	/* setting base address of binfo will automatically set it's members in sequence */
+	/* setting base address of binfo will automatically set it's members in sequence, note binfo_scrnx = (short *) 0xff4; */
 	binfo = (struct BOOTINFO *) 0xff0;
-	
+
+	/* as we will compile hankaku with bootpack, the fonts will be define in hankaku.bin, just need to declar it here to use it */
+	/* extern: when used, the variable is supposed to be used somehwere else and the resolving is deferred to the linker */
+	/*
+	extern char hankaku[4096];
+	*/
 	/* these address are from asmhead, it returns the width/heigh of current vga mode and the base vga ram address */
 	/*
 	binfo_scrnx = (short *) 0xff4;
@@ -94,19 +103,66 @@ void HariMain(void)
 	init_screen(binfo->vram, binfo->scrnx, binfo->scrny);	
 	
 	/* write a letter A ! */
+	/*
 	static char font_A[16] = {
 		0x00, 0x18, 0x18, 0x18, 0x18, 0x24, 0x24, 0x24,
 		0x24, 0x7e, 0x42, 0x42, 0x42, 0xe7, 0x00, 0x00
 	};
-	putfont8(binfo->vram, binfo->scrnx, 10, 10, COL8_FF0000, font_A);
-	
+	*/
+	/* 
+		since hankaku is a 256 * 16 byte memory block and each letter (16 byte) is stored as the ascii sequence,
+		to get the address of letter A, we just need to offset 0x41 ('A') bytes
+	*/
 
+	/*
+	putfont8(binfo->vram, binfo->scrnx, 8, 8, COL8_FF0000, hankaku + 'A' * 16);
+	putfont8(binfo->vram, binfo->scrnx, 16, 8, COL8_FF0000, hankaku + 'B' * 16);
+	putfont8(binfo->vram, binfo->scrnx, 24, 8, COL8_FF0000, hankaku + 'C' * 16);
+	putfont8(binfo->vram, binfo->scrnx, 32, 8, COL8_FF0000, hankaku + '1' * 16);
+	putfont8(binfo->vram, binfo->scrnx, 40, 8, COL8_FF0000, hankaku + '2' * 16);
+	putfont8(binfo->vram, binfo->scrnx, 48, 8, COL8_FF0000, hankaku + '3' * 16);
+	*/
+	/*
+	putfont8_asc(binfo->vram, binfo->scrnx, 8, 8, COL8_FF0000, "MLGBmlgb");
+
+	putfont8_asc(binfo->vram, binfo->scrnx, 31, 31, COL8_000000, "MLGB OS.");
+	putfont8_asc(binfo->vram, binfo->scrnx, 30, 30, COL8_FFFFFF, "MLGB OS.");
+	*/
+	/* 
+		unlike printf(), which can't be used in MLGB OS, sprintf() is used for writing to a particular address, therefore we can use it to initialize a string, need to use stdio.h
+		so we can print a variable's value on screen!
+	*/
+	/*
+	char* s;
+	sprintf(s, "scrnx=%d", binfo->scrnx);
+	putfont8_asc(binfo->vram, binfo->scrnx, 16, 64, COL8_FFFFFF, s);
+	*/
+
+	int mx, my;
+	mx = (binfo->scrnx - 16) / 2;
+	my = (binfo->scrny - 20 - 16) / 2;
+	char mouse[256], cor[40];
+	sprintf(cor, "(%d, %d)", mx, my);
+	putfont8_asc(binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, cor);
+	init_mouse_cursor8(mouse, COL8_008484);
+	putblock8_8(binfo->vram, binfo->scrnx, 16, 16, mx, my, mouse, 16);
 	for(;;) {
 		io_hlt();
 	}
 
 }
 
+/* this function is used to put a string */
+void putfont8_asc(char *vram, int xsize, int x, int y, char color, unsigned char *s) 
+{
+	extern char hankaku[4096];
+	/* 0x00 is the end of a string */
+	for(;*s != 0x00; s++)
+	{
+		putfont8(vram, xsize, x, y, color, hankaku + *s * 16);
+		x += 8;
+	}
+}
 /* font is a 8 * 16 matrix */
 void putfont8(char *vram, int xsize, int x, int y, char color, char *font)
 {
@@ -139,6 +195,61 @@ void putfont8(char *vram, int xsize, int x, int y, char color, char *font)
 	}
 	return;
 }
+
+void init_mouse_cursor8(char *mouse, char backgroudcolor)
+{
+	static char cursor[16][16] = {
+		"**************..",
+		"*OOOOOOOOOOO*...",
+		"*OOOOOOOOOO*....",
+		"*OOOOOOOOO*.....",
+		"*OOOOOOOO*......",
+		"*OOOOOOO*.......",
+		"*OOOOOOO*.......",
+		"*OOOOOOOO*......",
+		"*OOOO**OOO*.....",
+		"*OOO*..*OOO*....",
+		"*OO*....*OOO*...",
+		"*O*......*OOO*..",
+		"**........*OOO*.",
+		"*..........*OOO*",
+		"............*OO*",
+		".............***"
+	};
+
+	int x, y;
+	/* need to write the entire matrix */
+	for(y = 0; y < 16; y++) {
+		for(x = 0; x < 16; x++) {
+			/* edge */
+			if(cursor[y][x] == '*') {
+				mouse[y * 16 + x] = COL8_000000;
+			}
+			/* cursor */
+			if(cursor[y][x] == 'O') {
+				mouse[y * 16 + x] = COL8_FFFFFF;
+			}
+
+			if(cursor[y][x] == '.') {
+				mouse[y * 16 + x] = backgroudcolor;
+			}
+		}		
+	}
+	return;
+}
+
+/* used to copy a block of address to *vram */
+void putblock8_8( char *vram, int vxisze, int pxsize, int pysize, int px0, int py0, char *buf, int bxsize )
+{
+	int x, y;
+	for(y = 0; y < pysize; y++) {
+		for(x = 0; x < pxsize; x++) {
+			vram[(py0 +y) * vxisze + px0 + x] = buf[y * bxsize + x];
+		}
+	}
+	return;
+}
+
 
 void init_screen(char *vram, int xsize, int ysize)
 {

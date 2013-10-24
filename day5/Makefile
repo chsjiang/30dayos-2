@@ -9,6 +9,8 @@ BIM2HRB  	= $(TOOLPATH)bim2hrb.exe
 NASK		= $(TOOLPATH)nask.exe
 EDIMG		= $(TOOLPATH)edimg.exe
 IMGTOL		= $(TOOLPATH)imgtol.com
+MAKEFONT	= $(TOOLPATH)makefont.exe
+BIN2OBJ		= $(TOOLPATH)bin2obj.exe
 
 # the idea is first compile asmhead.nas into a binary file asmhead.bin that is executable
 # then compile bootpack.c into a hrb file bootpack.hrb, hrb is executable byte code, so we can simply cancatenate asmhead.bin and bootpack.hrb in to the .sys byte code, then we can use the fdimg0at.tek tool to genereate  a .img file
@@ -33,8 +35,8 @@ bootpack.obj : bootpack.nas Makefile
 naskfunc.obj : naskfunc.nas Makefile
 	$(NASK) naskfunc.nas naskfunc.obj naskfunc.lst
 	
-bootpack.bim : bootpack.obj naskfunc.obj Makefile
-	$(OBJ2BIM) @$(RULEFILE) out:bootpack.bim stack:3136k map:bootpack.map bootpack.obj naskfunc.obj
+bootpack.bim : bootpack.obj naskfunc.obj hankaku.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:bootpack.bim stack:3136k map:bootpack.map bootpack.obj naskfunc.obj hankaku.obj
 # 3MB+64KB=3136KB
 
 bootpack.hrb : bootpack.bim Makefile
@@ -45,6 +47,19 @@ ipl10.bin : ipl10.nas Makefile
 
 haribote.sys : asmhead.bin bootpack.hrb Makefile
 	cat asmhead.bin bootpack.hrb > haribote.sys
+
+# hankaku.bin is created by makefont.exe, which reads the hankaku.txt and generate a 16*256 = 4096 bytes file.
+# hankaku.txt contains 256 characters, each character will be represented by 16 bytes ( a 16*8 matrix ) after generated to a bin file
+hankaku.bin : hankaku.txt Makefile
+	$(MAKEFONT) hankaku.txt hankaku.bin
+
+# like the following assembly:
+#	_hankaku:
+#		DB 0x00 ... (all 4096 bytes)
+#
+hankaku.obj : hankaku.bin Makefile
+	$(BIN2OBJ) hankaku.bin hankaku.obj _hankaku
+
 
 # Note from now on apart from ipl10.bin, we will also need haribote.sys file to build the img
 # meaning the system image file is complete now, it has both ipl10 and system file	
@@ -74,3 +89,5 @@ clean :
 src_only :
 	make clean
 	rm haribote.img
+crun :
+	make clean run
