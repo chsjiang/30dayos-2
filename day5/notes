@@ -1,3 +1,4 @@
 today we implement charactor display by defining founts in a 8*16 matrix and paint it
 then we include hankaku.txt as a font file and use makefont.ext to translate this file into a 256 * 16 bytes bin file that contains the byte[] font information for each ascii character
 then we draw a mouse cursor(not moving yet)
+also we initialize GDT(global descriptor table) and IDT(interrupt descriptor table) to move the mouse cursor
