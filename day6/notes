@@ -1,0 +1,3 @@
+splitted bootpack.c into three files: bootpack.c graphic.c and dsctbl.c to specific jobs.
+also modifed Makefile, now we're generializing some rules by using wildcard
+note in Makefile is a generalized file is not EXPLICITED used elsewhere it won't be preserved. Check Makefile for details.
