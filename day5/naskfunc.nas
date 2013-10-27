@@ -1,4 +1,4 @@
-; This is a file to define a c function _io_hlt() that actually calls assembly HLT to avoid cpu spinning
+; This is a file to define a c functions that can only be achieved in assembly
 ; naskfunc
 ; TAB=4
 
@@ -17,7 +17,7 @@
 		GLOBAL	_io_in8, _io_in16, _io_in32
 		GLOBAL	_io_out8, _io_out16, _io_out32
 		GLOBAL	_io_load_eflags, _io_store_eflags
-
+		GLOBAL	_load_gdtr, _load_idtr
 
 ; the actual function
 
@@ -88,8 +88,20 @@ _io_load_eflags:	; int io_load_eflags(void);
 		RET			; RET will return value stored in EAX
 		
 _io_store_eflags:			; int io_store_eflags(it eflags);
-		MOV		EAX,[ESP+4] ; eflags
+		MOV		EAX, [ESP+4] ; eflags
 		PUSH	EAX 		; push EAX to stack
 		POPFD				; pop value from stack and assign to FLAGS
 		RET
-		
+
+_load_gdtr:		; void load_gdtr(int limit, int addr);
+		MOV 	AX, [ESP+4]	; limit
+		MOV 	[ESP+6], AX
+		LGDT 	[ESP+6]
+		RET
+
+_load_idtr:		; void load_gdtr(int limit, int addr);
+		MOV 	AX, [ESP+4]	; limit
+		MOV 	[ESP+6], AX
+		LIDT 	[ESP+6]
+		RET
+
