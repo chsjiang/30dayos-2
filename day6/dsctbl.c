@@ -1,33 +1,15 @@
-/* 
-	a segment descriptor contains 8 bytes , global segment descriptor table(GDT) contains upto 8191 descriptors( because segment register has 13 valid bits)
-	GDTR(GDT register) stores the starting address and number of valid descriptors
-*/
-struct SEGMENT_DESCRIPTOR {
-	short limit_low, base_low;
-	char base_mid, access_right;
-	char limit_high, base_high;
-};
+/* all function declarations in bootpack.h will be swapped here*/
+#include "bootpack.h"
 
-struct GATE_DESCRIPTOR {
-	short offset_low, selector;
-	char dw_count, access_right;
-	short offset_high;
-};
 
-void int_gtdidt(void);
-void set_segmdesc(struct SEGMENT_DESCRIPTOR *sd, unsigned int limit, int base, int ar);
-void set_gatedesc(struct GATE_DESCRIPTOR *gd, int offset, int selector, int ar);
-void load_gdtr(int limit, int addr);
-void load_idtr(int limit, int addr);
-
-void int_gtdidt(void)
+void init_gdtidt(void)
 {
 	/* 
 		set initial gdt address to 0x00270000, this is arbitrary as that's the address available for programming
 		that said, 0x00270000-0x0027ffff will be used for GDT, as 8192 * 8 = 2^16
 	*/
-	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *) 0x00270000;
-	struct GATE_DESCRIPTOR *idt = (struct GATE_DESCRIPTOR *) 0x0026f800;
+	struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *) ADR_GDT;
+	struct GATE_DESCRIPTOR *idt = (struct GATE_DESCRIPTOR *) ADR_IDT;
 	int i;
 
 	/* upto 8192 selectors */
@@ -37,21 +19,28 @@ void int_gtdidt(void)
 	}
 	/* after initialization, we need to setting values of first and second segment */
 	/* first segment is in charge of the entire memory 4g, therefore its limit is 0xffffffff - full 32 bits */
-	set_segmdesc(gdt + 1, 0xffffffff, 0x00000000, 0x4092);
+	set_segmdesc(gdt + 1, 0xffffffff, 0x00000000, AR_DATA32_RW);
 	/* second segment is for bootpack.hrb, which is 512 kb, inside boopack.hrb, it's ORG will be 0x00280000 */
 	/* 0x280000 - 0x2fffff is for bootpack.h, it's set in asmhead.nas */
-	set_segmdesc(gdt + 2, 0x0007ffff, 0x00280000, 0x409a);
+	set_segmdesc(gdt + 2, LIMIT_BOTPAK, ADR_BOTPAK, AR_CODE32_ER);
 
 	/* can't directly writie to gdt register or idt register, need to use assembly */
 	/* gdtr will start from 0x0027000 */
-	load_gdtr(0xffff, 0x00270000);
+	load_gdtr(LIMIT_GDT, ADR_GDT);
 
 	for(i = 0; i < 256; i++) {
 		set_gatedesc(idt + i, 0, 0, 0);
 	}
 	
 	/* ldtr will start from 0x0026f800 */
-	load_idtr(0x7ff, 0x0026f800);
+	load_idtr(LIMIT_IDT, ADR_IDT);
+
+	/* register IDT for mouse and keyboard handler, calling callback*/
+	/* 2 * 8 is segment seelctor, we are at number 2 segment therefore need to offset 16 bytes */
+	set_gatedesc(idt + 0x21, (int) asm_inthandler21, 2 * 8, AR_INTGATE32);
+	set_gatedesc(idt + 0x27, (int) asm_inthandler27, 2 * 8, AR_INTGATE32);
+	set_gatedesc(idt + 0x2c, (int) asm_inthandler2c, 2 * 8, AR_INTGATE32);
+
 	return;
 }
 

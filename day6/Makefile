@@ -12,6 +12,8 @@ IMGTOL		= $(TOOLPATH)imgtol.com
 MAKEFONT	= $(TOOLPATH)makefont.exe
 BIN2OBJ		= $(TOOLPATH)bin2obj.exe
 
+OBJPACK		= bootpack.obj int.obj graphic.obj dsctbl.obj naskfunc.obj hankaku.obj
+
 # the idea is first compile asmhead.nas into a binary file asmhead.bin that is executable
 # then compile bootpack.c into a hrb file bootpack.hrb, hrb is executable byte code, so we can simply cancatenate asmhead.bin and bootpack.hrb in to the .sys byte code, then we can use the fdimg0at.tek tool to genereate  a .img file
 # bootpack.c -> bootpack.gas (gcc is based on gas assembly and out puts .gas by default) -> bootpack.nas -> bootpack.obj -> bootpack.bim -> bootpack.hrb
@@ -60,8 +62,8 @@ asmhead.bin : asmhead.nas Makefile
 ipl10.bin : ipl10.nas Makefile
 	$(NASK) ipl10.nas ipl10.bin ipl10.lst
 
-bootpack.bim : bootpack.obj graphic.obj dsctbl.obj naskfunc.obj hankaku.obj Makefile
-	$(OBJ2BIM) @$(RULEFILE) out:bootpack.bim stack:3136k map:bootpack.map bootpack.obj graphic.obj dsctbl.obj naskfunc.obj hankaku.obj
+bootpack.bim : $(OBJPACK) Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:bootpack.bim stack:3136k map:bootpack.map $(OBJPACK)
 # 3MB+64KB=3136KB
 
 bootpack.hrb : bootpack.bim Makefile

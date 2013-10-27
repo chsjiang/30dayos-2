@@ -1,3 +1,7 @@
 splitted bootpack.c into three files: bootpack.c graphic.c and dsctbl.c to specific jobs.
 also modifed Makefile, now we're generializing some rules by using wildcard
 note in Makefile is a generalized file is not EXPLICITED used elsewhere it won't be preserved. Check Makefile for details.
+declare all file signatures in bootpack.h
+
+then we added an interruption call back to catch mouse and keyboard interruptions
+asm_inthandler21, asm_inthandler27 and asm_inthandler2c （all defined in naskfunk.nas) is used for handling specific interruptions, and we registered the functions in idt by writing IDT in init_gdtidt

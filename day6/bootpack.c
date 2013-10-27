@@ -1,67 +1,5 @@
 #include <stdio.h>
-/* declare there's another function defined in other place (naskfunc.obj) */
-
-void io_hlt(void);
-void io_cli(void);
-void io_out8(int port, int data);
-int io_load_eflags(void);
-void io_store_eflags(int eflags);
-
-/* declare a function defined in this file */
-void init_palette(void);
-void set_palette(int, int, unsigned char*);
-void boxfill8(unsigned char*, int, unsigned char, int x0, int y0, int x1, int y1);
-void init_screen(char *vram, int xsize, int ysize);
-void putfont8(char *vram, int xsize, int x, int y, char color, char *font);
-void putfont8_asc(char *vram, int xsize, int x, int y, char color, unsigned char *s);
-void init_mouse_cursor8(char *mouse, char backgroudcolor);
-void putblock8_8( char *vram, int vxisze, int pxsize, int pysize, int px0, int py0, char *buf, int bxsize);
-
-#define COL8_000000		0
-#define COL8_FF0000		1
-#define COL8_00FF00		2
-#define COL8_FFFF00		3
-#define COL8_0000FF		4
-#define COL8_FF00FF		5
-#define COL8_00FFFF		6
-#define COL8_FFFFFF		7
-#define COL8_C6C6C6		8
-#define COL8_840000		9
-#define COL8_008400		10
-#define COL8_848400		11
-#define COL8_000084		12
-#define COL8_840084		13
-#define COL8_008484		14
-#define COL8_848484		15
-
-/* struct definition needs to be followed by comma */
-struct BOOTINFO {
-	char cyls, leds, vmode, reserve;
-	short scrnx, scrny;
-	char *vram;
-};
-
-/* 
-	a segment descriptor contains 8 bytes , global segment descriptor table(GDT) contains upto 8191 descriptors( because segment register has 13 valid bits)
-	GDTR(GDT register) stores the starting address and number of valid descriptors
-*/
-struct SEGMENT_DESCRIPTOR {
-	short limit_low, base_low;
-	char base_mid, access_right;
-	char limit_high, base_high;
-};
-
-struct GATE_DESCRIPTOR {
-	short offset_low, selector;
-	char dw_count, access_right;
-	short offset_high;
-};
-
-void int_gtdidt(void);
-void set_segmdesc(struct SEGMENT_DESCRIPTOR *sd, unsigned int limit, int base, int ar);
-void set_gatedesc(struct GATE_DESCRIPTOR *gd, int offset, int selector, int ar);
-void load_gdtr(int limit, int addr);
-void load_idtr(int limit, int addr);
+#include "bootpack.h"
 
 void HariMain(void)
 {	
@@ -73,12 +11,14 @@ void HariMain(void)
 	int *binfo_vram;
 	*/
 	init_palette();
-	
-	struct BOOTINFO *binfo;
-	
-	/* setting base address of binfo will automatically set it's members in sequence, note binfo_scrnx = (short *) 0xff4; */
-	binfo = (struct BOOTINFO *) 0xff0;
 
+
+	init_gdtidt();
+	init_pic();
+	/* set interruption flag to one so that it's able to accespt interruptsion, it was cleared during set_pallete() */
+	io_sti();
+	struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
+	
 	/* as we will compile hankaku with bootpack, the fonts will be define in hankaku.bin, just need to declar it here to use it */
 	/* extern: when used, the variable is supposed to be used somehwere else and the resolving is deferred to the linker */
 	/*
@@ -145,10 +85,10 @@ void HariMain(void)
 	putfont8(binfo->vram, binfo->scrnx, 48, 8, COL8_FF0000, hankaku + '3' * 16);
 	*/
 	/*
-	putfont8_asc(binfo->vram, binfo->scrnx, 8, 8, COL8_FF0000, "MLGBmlgb");
+	putfonts8_asc(binfo->vram, binfo->scrnx, 8, 8, COL8_FF0000, "MLGBmlgb");
 
-	putfont8_asc(binfo->vram, binfo->scrnx, 31, 31, COL8_000000, "MLGB OS.");
-	putfont8_asc(binfo->vram, binfo->scrnx, 30, 30, COL8_FFFFFF, "MLGB OS.");
+	putfonts8_asc(binfo->vram, binfo->scrnx, 31, 31, COL8_000000, "MLGB OS.");
+	putfonts8_asc(binfo->vram, binfo->scrnx, 30, 30, COL8_FFFFFF, "MLGB OS.");
 	*/
 	/* 
 		unlike printf(), which can't be used in MLGB OS, sprintf() is used for writing to a particular address, therefore we can use it to initialize a string, need to use stdio.h
@@ -157,7 +97,7 @@ void HariMain(void)
 	/*
 	char* s;
 	sprintf(s, "scrnx=%d", binfo->scrnx);
-	putfont8_asc(binfo->vram, binfo->scrnx, 16, 64, COL8_FFFFFF, s);
+	putfonts8_asc(binfo->vram, binfo->scrnx, 16, 64, COL8_FFFFFF, s);
 	*/
 
 	int mx, my;
@@ -165,9 +105,14 @@ void HariMain(void)
 	my = (binfo->scrny - 20 - 16) / 2;
 	char mouse[256], cor[40];
 	sprintf(cor, "(%d, %d)", mx, my);
-	putfont8_asc(binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, cor);
+	putfonts8_asc(binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, cor);
 	init_mouse_cursor8(mouse, COL8_008484);
 	putblock8_8(binfo->vram, binfo->scrnx, 16, 16, mx, my, mouse, 16);
+
+	/* accept interruption from mouse and keyboard */
+	io_out8(PIC0_IMR, 0xf9);
+	io_out8(PIC1_IMR, 0xef);
+
 	for(;;) {
 		io_hlt();
 	}
