@@ -39,10 +39,43 @@ void inthandler21(int *esp)
 	io_out8(PIC0_OCW2, 0x61);
 	/* then get key data from keyboard port */
 	data = io_in8(PORT_KEYDAT);
+	/*
 	if(keybuf.flag == 0) {
 		keybuf.data = data;
 		keybuf.flag = 1;
 	}
+	*/
+	/* try to add the value to end of the ring buffer */
+	/* using a fancier ring buffer */
+	if(!keybuf.full) {
+		keybuf.data[keybuf.end] = data;
+		keybuf.end = (keybuf.end + 1) % 32;
+		if(keybuf.end == keybuf.start) {
+			keybuf.full = 1;
+		}
+	}
+
+	/* if end is equal or after start */
+	/*
+	if(keybuf.end >= keybuf.start && !keybuf.full) {
+		if(keybuf.end + 1 < 32) {
+			keybuf.data[keybuf.end++] = data;
+		} 
+		 ;else we add from start of the buffer - we only add when there's still empty spot in the 32 length array
+		else if(keybuf.start > 0){
+			keybuf.end = 0;
+			keybuf.data[0] = data;
+		}
+	} 
+	 ;if end is before start - we only add when there's still empty spot in the 32 length array 
+	else if(keybuf.end < keybuf.start){
+		keybuf.data[keybuf.end++] = data;
+	}
+	if(keybuf.end == keybuf.start) {
+		keybuf.full = 1;
+	}
+	*/
+
 	/*
 	struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
 	sprintf(s, "%02x", data);

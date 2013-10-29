@@ -1,0 +1,3 @@
+today we read the data from keyboard by handling keyboard interruption and display it on screen, note since signal might arrive at any moment, the handler should execute fast enough. If handle signal and drawing value on screen is happening synchronisely, it will be slow.
+Therefore we use a function in int.c to specificly listening to interruptions and set the value to buffer. And in bootpack.c, use the loop to check buffer periodically and print the value if it's set.
+The buffer is a ring buffer of 32 bytes : when pressing a key, two interrupt will be generated to track 'press' and 'release', need to buffer couple of keys codes to track them.

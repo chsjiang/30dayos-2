@@ -121,6 +121,35 @@ void HariMain(void)
 	*/
 	for(;;) {
 		io_cli();
+		/* reading one byte from the ring buffer */
+		if(keybuf.start < keybuf.end) {
+			io_sti();
+			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
+			sprintf(buffer, "%02x", keybuf.data[keybuf.start++]);
+			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
+			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
+		} else if(keybuf.start > keybuf.end) {
+			io_sti();
+			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
+			sprintf(buffer, "%02x", keybuf.data[keybuf.start]);
+			keybuf.start = (keybuf.start + 1) % 32;
+			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
+			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
+		} 
+		/* else keybuf.start == keybuf.end, need to check if it's full */
+		else if(keybuf.full){
+			io_sti();
+			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
+			sprintf(buffer, "%02x", keybuf.data[keybuf.start]);
+			keybuf.start = (keybuf.start + 1) % 32;
+			keybuf.full = 0;
+			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
+			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
+		} 
+		else {
+			io_stihlt();
+		}
+		/*
 		if(keybuf.flag == 1) {
 			keybuf.flag = 0;
 			io_sti();
@@ -131,6 +160,7 @@ void HariMain(void)
 		} else {
 			io_stihlt();
 		}
+		*/
 	}
 
 }

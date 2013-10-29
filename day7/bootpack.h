@@ -95,7 +95,13 @@ struct BOOTINFO {
 	because interruption handling should be fast and short
 */
 struct KEYBUF {
-	unsigned char data, flag;
+	/* unsigned char data, flag; */
+
+	/* instead of defining just one char, we need a FIFO buffer to handle multiple chars, because one keystroke will generate 2 key code */
+	unsigned char data[32];
+	int start, end;
+	/* can't define default value here! */
+	int full;
 };
 
 void init_pic(void);
