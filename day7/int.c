@@ -28,7 +28,8 @@ void init_pic(void)
 	return;
 }
 
-struct KEYBUF keybuf;
+/* struct KEYBUF keybuf; */
+struct FIFO8 keyfifo;
 
 /* IRQ1 : keyboard, INT21 */
 /* note we're just buffering the key value here to process faster, there's a loop in bootpack.c to check the buffer and print it */
@@ -39,6 +40,7 @@ void inthandler21(int *esp)
 	io_out8(PIC0_OCW2, 0x61);
 	/* then get key data from keyboard port */
 	data = io_in8(PORT_KEYDAT);
+
 	/*
 	if(keybuf.flag == 0) {
 		keybuf.data = data;
@@ -47,6 +49,7 @@ void inthandler21(int *esp)
 	*/
 	/* try to add the value to end of the ring buffer */
 	/* using a fancier ring buffer */
+	/*
 	if(!keybuf.full) {
 		keybuf.data[keybuf.end] = data;
 		keybuf.end = (keybuf.end + 1) % 32;
@@ -54,6 +57,9 @@ void inthandler21(int *esp)
 			keybuf.full = 1;
 		}
 	}
+	*/
+	fifo8_put(&keyfifo, data);
+
 
 	/* if end is equal or after start */
 	/*

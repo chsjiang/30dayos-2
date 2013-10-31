@@ -121,3 +121,18 @@ void inthandler2c(int *esp);
 #define PIC1_ICW3		0x00a1
 #define PIC1_ICW4		0x00a1
 #define PORT_KEYDAT		0x0060
+
+/* fifo.c */
+/* defining an unbounded resizable buffer */
+struct FIFO8 {
+	unsigned char *data;
+	int start, end, size, full, flag;
+};
+
+void fifo8_init(struct FIFO8 *fifo, int size, unsigned char* buf);
+
+int fifo8_put(struct FIFO8 *fifo, unsigned char data);
+
+int fifo8_get(struct FIFO8 *fifo);
+
+int fifo8_status(struct FIFO8 *fifo);

@@ -12,7 +12,7 @@ IMGTOL		= $(TOOLPATH)imgtol.com
 MAKEFONT	= $(TOOLPATH)makefont.exe
 BIN2OBJ		= $(TOOLPATH)bin2obj.exe
 
-OBJPACK		= bootpack.obj int.obj graphic.obj dsctbl.obj naskfunc.obj hankaku.obj
+OBJPACK		= bootpack.obj int.obj graphic.obj dsctbl.obj naskfunc.obj hankaku.obj fifo.obj
 
 # the idea is first compile asmhead.nas into a binary file asmhead.bin that is executable
 # then compile bootpack.c into a hrb file bootpack.hrb, hrb is executable byte code, so we can simply cancatenate asmhead.bin and bootpack.hrb in to the .sys byte code, then we can use the fdimg0at.tek tool to genereate  a .img file

@@ -2,7 +2,8 @@
 #include "bootpack.h"
 
 /* keybuf is defined in int.c */
-extern struct KEYBUF keybuf;
+/* extern struct KEYBUF keybuf; */
+extern struct FIFO8 keyfifo;
 
 void HariMain(void)
 {	
@@ -103,10 +104,10 @@ void HariMain(void)
 	putfonts8_asc(binfo->vram, binfo->scrnx, 16, 64, COL8_FFFFFF, s);
 	*/
 
-	int mx, my;
+	int mx, my, i;
 	mx = (binfo->scrnx - 16) / 2;
 	my = (binfo->scrny - 20 - 16) / 2;
-	char mouse[256], buffer[40];
+	char mouse[256], buffer[40], keybuf[32];
 	sprintf(buffer, "(%d, %d)", mx, my);
 	putfonts8_asc(binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, buffer);
 	init_mouse_cursor8(mouse, COL8_008484);
@@ -116,12 +117,29 @@ void HariMain(void)
 	io_out8(PIC0_IMR, 0xf9);
 	io_out8(PIC1_IMR, 0xef);
 
+
+	/* initialize unbounded buffer */
+	fifo8_init(&keyfifo, 32, keybuf);
 	/*
 		this loop will keep looking at keybuf, if an interruption happens and keybuf is set then it prints the data
 	*/
 	for(;;) {
 		io_cli();
+		/* use unbounded buffer */
+		/* check size first */
+		if(fifo8_status(&keyfifo) == 0) {
+			io_stihlt();
+		} else {
+			/* i can't be -1 as we already checked size */
+			i = fifo8_get(&keyfifo);
+			io_sti();
+			sprintf(buffer, "%02x", i);
+			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
+			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
+		}
 		/* reading one byte from the ring buffer */
+		/* need to re-enable interruption io_sti(); */
+		/*
 		if(keybuf.start < keybuf.end) {
 			io_sti();
 			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
@@ -136,7 +154,7 @@ void HariMain(void)
 			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
 			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
 		} 
-		/* else keybuf.start == keybuf.end, need to check if it's full */
+		// else keybuf.start == keybuf.end, need to check if it's full
 		else if(keybuf.full){
 			io_sti();
 			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
@@ -149,6 +167,7 @@ void HariMain(void)
 		else {
 			io_stihlt();
 		}
+		/*
 		/*
 		if(keybuf.flag == 1) {
 			keybuf.flag = 0;
