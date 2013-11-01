@@ -2,3 +2,4 @@ today we read the data from keyboard by handling keyboard interruption and displ
 Therefore we use a function in int.c to specificly listening to interruptions and set the value to buffer. And in bootpack.c, use the loop to check buffer periodically and print the value if it's set.
 The buffer is a ring buffer of 32 bytes : when pressing a key, two interrupt will be generated to track 'press' and 'release', need to buffer couple of keys codes to track them.
 adding a resizable buffer FIFO8 and it's corresponding methods
+adding mouse interruption handling - it's basicly same thing with keyboard handler, but form differnt ports.

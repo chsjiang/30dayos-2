@@ -4,6 +4,11 @@
 /* keybuf is defined in int.c */
 /* extern struct KEYBUF keybuf; */
 extern struct FIFO8 keyfifo;
+extern struct FIFO8 mousefifo;
+
+void wait_KBC_sendready(void);
+void init_keyboard(void);
+void enable_mouse(void);
 
 void HariMain(void)
 {	
@@ -107,19 +112,27 @@ void HariMain(void)
 	int mx, my, i;
 	mx = (binfo->scrnx - 16) / 2;
 	my = (binfo->scrny - 20 - 16) / 2;
-	char mouse[256], buffer[40], keybuf[32];
+	/* mouse is generating way more interruption than key, therefore we bump up the buffer to 128 */
+	char mouse[256], buffer[40], keybuf[32], mousebuf[128];
 	sprintf(buffer, "(%d, %d)", mx, my);
 	putfonts8_asc(binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, buffer);
 	init_mouse_cursor8(mouse, COL8_008484);
 	putblock8_8(binfo->vram, binfo->scrnx, 16, 16, mx, my, mouse, 16);
 
+
 	/* accept interruption from mouse and keyboard */
 	io_out8(PIC0_IMR, 0xf9);
 	io_out8(PIC1_IMR, 0xef);
 
-
 	/* initialize unbounded buffer */
 	fifo8_init(&keyfifo, 32, keybuf);
+	fifo8_init(&mousefifo, 128, mousebuf);
+	
+	/* initilize keyboard and mouse*/
+	init_keyboard();
+	enable_mouse();
+
+
 	/*
 		this loop will keep looking at keybuf, if an interruption happens and keybuf is set then it prints the data
 	*/
@@ -127,59 +140,66 @@ void HariMain(void)
 		io_cli();
 		/* use unbounded buffer */
 		/* check size first */
-		if(fifo8_status(&keyfifo) == 0) {
+		if(fifo8_status(&keyfifo) + fifo8_status(&mousefifo) == 0) {
 			io_stihlt();
 		} else {
-			/* i can't be -1 as we already checked size */
-			i = fifo8_get(&keyfifo);
-			io_sti();
-			sprintf(buffer, "%02x", i);
-			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
-			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
+			if(fifo8_status(&keyfifo) != 0) {
+				/* i can't be -1 as we already checked size */
+				i = fifo8_get(&keyfifo);
+				io_sti();
+				sprintf(buffer, "%02X", i);
+				boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
+				putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
+			} 
+			/* we handle keyboard int in higher priority */
+			else if(fifo8_status(&mousefifo) != 0) {
+				i = fifo8_get(&mousefifo);
+				io_sti();
+				sprintf(buffer, "%02X", i);
+				boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 32, 16, 47, 31);
+				putfonts8_asc(binfo->vram, binfo->scrnx, 32, 16, COL8_FFFFFF, buffer);
+			}
 		}
-		/* reading one byte from the ring buffer */
-		/* need to re-enable interruption io_sti(); */
-		/*
-		if(keybuf.start < keybuf.end) {
-			io_sti();
-			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
-			sprintf(buffer, "%02x", keybuf.data[keybuf.start++]);
-			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
-			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
-		} else if(keybuf.start > keybuf.end) {
-			io_sti();
-			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
-			sprintf(buffer, "%02x", keybuf.data[keybuf.start]);
-			keybuf.start = (keybuf.start + 1) % 32;
-			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
-			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
-		} 
-		// else keybuf.start == keybuf.end, need to check if it's full
-		else if(keybuf.full){
-			io_sti();
-			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
-			sprintf(buffer, "%02x", keybuf.data[keybuf.start]);
-			keybuf.start = (keybuf.start + 1) % 32;
-			keybuf.full = 0;
-			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
-			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
-		} 
-		else {
-			io_stihlt();
-		}
-		/*
-		/*
-		if(keybuf.flag == 1) {
-			keybuf.flag = 0;
-			io_sti();
-			struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
-			sprintf(buffer, "%02x", keybuf.data);
-			boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
-			putfonts8_asc(binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
-		} else {
-			io_stihlt();
-		}
-		*/
 	}
 
+
+}
+
+#define PORT_KEYDAT				0x0060
+#define PORT_KEYSTA				0x0064
+#define PORT_KEYCMD				0x0064
+#define KEYSTA_SEND_NOTREADY	0x02
+#define KEYCMD_WRITE_MODE		0x60
+#define KBC_MODE				0x47
+
+/* once this returns we can send mode setting instruction data to keyboard */
+void wait_KBC_sendready(void)
+{
+	while(1) {
+		/* if succeed, the last but two bit should be 0 */
+		if((io_in8(PORT_KEYSTA) & KEYSTA_SEND_NOTREADY) == 0) {
+			break;
+		}
+	}
+	return;
+}
+
+void init_keyboard(void)
+{
+	wait_KBC_sendready();
+	io_out8(PORT_KEYCMD, KEYCMD_WRITE_MODE);
+	wait_KBC_sendready();
+	io_out8(PORT_KEYDAT, KBC_MODE);
+}
+
+#define KEYCMD_SENDTO_MOUSE		0xd4
+#define MOUSECMD_ENABLE			0xf4
+
+void enable_mouse(void)
+{
+	wait_KBC_sendready();
+	io_out8(PORT_KEYCMD, KEYCMD_SENDTO_MOUSE);
+	wait_KBC_sendready();
+	io_out8(PORT_KEYDAT, MOUSECMD_ENABLE);
+	return;
 }
