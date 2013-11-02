@@ -1,49 +1,46 @@
 ; haribote-os boot asm
 ; TAB=4
 
-BOTPAK	EQU		0x00280000		; bootpackのロード先
-DSKCAC	EQU		0x00100000		; ディスクキャッシュの場所
-DSKCAC0	EQU		0x00008000		; ディスクキャッシュの場所（リアルモード）
+BOTPAK	EQU		0x00280000		; bootpack will be copied to this address
+DSKCAC	EQU		0x00100000		; 1MB
+DSKCAC0	EQU		0x00008000		; used to offset the address of second sector, 0x8200
 
-; BOOT_INFO関係
-CYLS	EQU		0x0ff0			; ブートセクタが設定する
+; BOOT_INFO
+CYLS	EQU		0x0ff0
 LEDS	EQU		0x0ff1
-VMODE	EQU		0x0ff2			; 色数に関する情報。何ビットカラーか？
-SCRNX	EQU		0x0ff4			; 解像度のX
-SCRNY	EQU		0x0ff6			; 解像度のY
-VRAM	EQU		0x0ff8			; グラフィックバッファの開始番地
+VMODE	EQU		0x0ff2			; 臣its of color
+SCRNX	EQU		0x0ff4			; screen X
+SCRNY	EQU		0x0ff6			; screen Y
+VRAM	EQU		0x0ff8			; buffer area's starting address, video RAM
 
-		ORG		0xc200			; このプログラムがどこに読み込まれるのか
+		ORG		0xc200			; from haribote.img byte code, we know the sys is being added at address 0x4200 of flopy
+								; since we have copied our flopy data to disk starting from 0x8000, we know the address of the sys code to be loaded on disk is 0x8000+0x4200=0xc200
 
-; 画面モードを設定
-
-		MOV		AL,0x13			; VGAグラフィックス、320x200x8bitカラー
+		MOV		AL,0x13
 		MOV		AH,0x00
 		INT		0x10
-		MOV		BYTE [VMODE],8	; 画面モードをメモする（C言語が参照する）
+		MOV		BYTE [VMODE],8	; An interruption to set VGA graphics card to 320*200*8 mode
 		MOV		WORD [SCRNX],320
 		MOV		WORD [SCRNY],200
 		MOV		DWORD [VRAM],0x000a0000
 
-; キーボードのLED状態をBIOSに教えてもらう
+; use BIOS to get status of leds on keyboard
 
 		MOV		AH,0x02
 		INT		0x16 			; keyboard BIOS
 		MOV		[LEDS],AL
 
-; PICが一切の割り込みを受け付けないようにする
-;	AT互換機の仕様では、PICの初期化をするなら、
-;	こいつをCLI前にやっておかないと、たまにハングアップする
-;	PICの初期化はあとでやる
+; PIC disable all interruptions
+;	PIC initialization need to be before CLI, otherwise might suspend
 
 		MOV		AL,0xff
 		OUT		0x21,AL
-		NOP						; OUT命令を連続させるとうまくいかない機種があるらしいので
+		NOP						; can't do OUT consequtives, let CPU stop for a timeclock unit
 		OUT		0xa1,AL
 
-		CLI						; さらにCPUレベルでも割り込み禁止
+		CLI						; disable CPU interruptions
 
-; CPUから1MB以上のメモリにアクセスできるように、A20GATEを設定
+; set A20GATE to enable CPU access over 1MB space
 
 		CALL	waitkbdout
 		MOV		AL,0xd1
@@ -53,16 +50,16 @@ VRAM	EQU		0x0ff8			; グラフィックバッファの開始番地
 		OUT		0x60,AL
 		CALL	waitkbdout
 
-; プロテクトモード移行
+; switch to protection mode
+; in protection mode, application is not able to change get segment or use OS specific segment
+[INSTRSET "i486p"]				; need to use 486 instruction set, can use LGDT, CR0 thereafter
 
-[INSTRSET "i486p"]				; 486の命令まで使いたいという記述
-
-		LGDT	[GDTR0]			; 暫定GDTを設定
-		MOV		EAX,CR0
-		AND		EAX,0x7fffffff	; bit31を0にする（ページング禁止のため）
-		OR		EAX,0x00000001	; bit0を1にする（プロテクトモード移行のため）
+		LGDT	[GDTR0]			; temporary GDT
+		MOV		EAX,CR0			; control register, only availabe by os
+		AND		EAX,0x7fffffff	; set bit31 to 0
+		OR		EAX,0x00000001	; set bit0 to 1, to enable protection mode
 		MOV		CR0,EAX
-		JMP		pipelineflush
+		JMP		pipelineflush	; after switching to protection mode, CPU will pipe instructions
 pipelineflush:
 		MOV		AX,1*8			;  読み書き可能セグメント32bit
 		MOV		DS,AX
@@ -71,71 +68,77 @@ pipelineflush:
 		MOV		GS,AX
 		MOV		SS,AX
 
-; bootpackの転送
-
-		MOV		ESI,bootpack	; 転送元
-		MOV		EDI,BOTPAK		; 転送先
-		MOV		ECX,512*1024/4
+; move bootpack
+; bootpack.hrb is concatenated after asmhead, therefore we have a tag bootpack at end of asmhead.nas
+; 512KB is way bigger than bootpack, but it's ok
+; copy from bootpack to 0x00280000, copy 512KB
+		MOV		ESI,bootpack	; src
+		MOV		EDI,BOTPAK		; dest
+		MOV		ECX,512*1024/4  ; size, note the reason we divide 4 is because memcpy copies a DWORD
 		CALL	memcpy
 
-; ついでにディスクデータも本来の位置へ転送
+; disk data will be in place
 
-; まずはブートセクタから
-
-		MOV		ESI,0x7c00		; 転送元
-		MOV		EDI,DSKCAC		; 転送先
-		MOV		ECX,512/4
+; starting from boot sector
+; DSKCAC is 0x00100000, this mempy copies 512 bytes from 0x7c00 to 0x00100000 on disk, IPL(first sector, 512 bytes) starts from 0x7c00
+		MOV		ESI,0x7c00		; src
+		MOV		EDI,DSKCAC		; dest
+		MOV		ECX,512/4       ; size
 		CALL	memcpy
 
-; 残り全部
-
-		MOV		ESI,DSKCAC0+512	; 転送元
-		MOV		EDI,DSKCAC+512	; 転送先
-		MOV		ECX,0
+; rest
+; coplies from 0x00008200 to 0x00100200, the second sector starts from 0x8200
+		MOV		ESI,DSKCAC0+512	; src
+		MOV		EDI,DSKCAC+512	; dest
+		MOV		ECX,0           ; size
 		MOV		CL,BYTE [CYLS]
-		IMUL	ECX,512*18*2/4	; シリンダ数からバイト数/4に変換
-		SUB		ECX,512/4		; IPLの分だけ差し引く
+		IMUL	ECX,512*18*2/4	; convert from number of cylinders to number of bytes/4
+		SUB		ECX,512/4		; minus IPL
 		CALL	memcpy
 
-; asmheadでしなければいけないことは全部し終わったので、
-;	あとはbootpackに任せる
+; the previous part needs to be handled in asmhead
+; the reset can be handled by bootpack
 
-; bootpackの起動
+; bootpack initialization
 
 		MOV		EBX,BOTPAK
 		MOV		ECX,[EBX+16]
 		ADD		ECX,3			; ECX += 3;
 		SHR		ECX,2			; ECX /= 4;
-		JZ		skip			; 転送するべきものがない
-		MOV		ESI,[EBX+20]	; 転送元
+		JZ		skip			; nothing to move
+		MOV		ESI,[EBX+20]	; src
 		ADD		ESI,EBX
-		MOV		EDI,[EBX+12]	; 転送先
+		MOV		EDI,[EBX+12]	; dest
 		CALL	memcpy
 skip:
-		MOV		ESP,[EBX+12]	; スタック初期値
+		MOV		ESP,[EBX+12]	; initial stack value
+		; 0x1b of the second segment, it's the 0x1b address of bootpack.hrb, jumpting to there will start execute bootpack.hrb
 		JMP		DWORD 2*8:0x0000001b
 
+; like wait_KBC_sendready
 waitkbdout:
 		IN		 AL,0x64
 		AND		 AL,0x02
-		JNZ		waitkbdout		; ANDの結果が0でなければwaitkbdoutへ
+		JNZ		waitkbdout		; keep listening to the 'already sent' signal
 		RET
 
+; memcpy copies from [ESI] to [EDI] with size ECX, note ECX is in DWORD, therefore size would be bytes/4
 memcpy:
 		MOV		EAX,[ESI]
 		ADD		ESI,4
 		MOV		[EDI],EAX
 		ADD		EDI,4
 		SUB		ECX,1
-		JNZ		memcpy			; 引き算した結果が0でなければmemcpyへ
+		JNZ		memcpy
 		RET
-; memcpyはアドレスサイズプリフィクスを入れ忘れなければ、ストリング命令でも書ける
 
+		; padding DB 0 untill the address can be divided by 16, can be more effective
 		ALIGNB	16
+
 GDT0:
-		RESB	8				; ヌルセレクタ
-		DW		0xffff,0x0000,0x9200,0x00cf	; 読み書き可能セグメント32bit
-		DW		0xffff,0x0000,0x9a28,0x0047	; 実行可能セグメント32bit（bootpack用）
+		RESB	8				; NULL selector
+		DW		0xffff,0x0000,0x9200,0x00cf	; rw segment 32 bit
+		DW		0xffff,0x0000,0x9a28,0x0047	; exe segment 32 bit (used by bootpack)
 
 		DW		0
 GDTR0:
@@ -143,4 +146,6 @@ GDTR0:
 		DD		GDT0
 
 		ALIGNB	16
+
+; concatenated after this
 bootpack:

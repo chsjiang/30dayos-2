@@ -18,11 +18,11 @@ int mouse_decode(struct MOUSE_DEC *mdec, unsigned char dat);
 
 void HariMain(void)
 {	
-	init_palette();
 	init_gdtidt();
 	init_pic();
 	/* set interruption flag to one so that it's able to accespt interruptsion, it was cleared during set_pallete() */
 	io_sti();
+	init_palette();
 	struct BOOTINFO *binfo = (struct BOOTINFO *) ADR_BOOTINFO;
 	
 	init_screen8(binfo->vram, binfo->scrnx, binfo->scrny);	

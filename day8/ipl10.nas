@@ -85,7 +85,7 @@ next:
 		MOV		DH,0			; then we continue using face header
 		ADD		CH,1			; move the to next cylinder
 		CMP		CH,CYLS			
-		JB		readloop		; if we are still blow cylinder, we will continue to read 18 sectors from face/tail of this cylinder
+		JB		readloop		; if we are still below cylinder, we will continue to read 18 sectors from face/tail of this cylinder
 								; if we reach here, then we have read all data of first 10 cylinders, 10 * 2 * 18 * 512 = 180k
 								;
 		MOV		[0x0ff0],CH		; need to buffer the # of cylinders read by this ipl to disk, note we have only read 10 cylinders
