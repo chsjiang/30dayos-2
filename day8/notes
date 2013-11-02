@@ -1,1 +1,3 @@
-starting day 8, decoding the three interruption bytes retured by moving mouse, which button is clicked(left/center/right) is in the first byte, its coordinates is in second and third byte.
+decoding the three interruption bytes retured by moving mouse, which button is clicked(left/center/right) is in the first byte, its coordinates is in second and third byte.
+then base on the interruption info we get from mouse, repaint the mouse on screen to make it moving
+

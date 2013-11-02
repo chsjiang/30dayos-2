@@ -76,6 +76,7 @@ void HariMain(void)
 				/* once we have gathered all three signals, print it on screen */
 				if(mouse_decode(&mdec, i) != 0) {
 					sprintf(buffer, "[lcr %04d %04d]", mdec.x, mdec.y);
+					/* note: unless we realase a button, the mdec.btn mask will always be set and letter will alawys be captial */
 					if((mdec.btn & 0x01) != 0) {
 						buffer[1] = 'L';
 					}
@@ -87,6 +88,33 @@ void HariMain(void)
 					}
 					boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 32, 16, 32 + 15 * 8 - 1, 31);
 					putfonts8_asc(binfo->vram, binfo->scrnx, 32, 16, COL8_FFFFFF, buffer);
+
+					/* move mouse */
+					/* first clear mouse */
+					boxfill8(binfo->vram, binfo->scrnx, COL8_008484, mx, my, mx + 15, my + 15);
+
+					mx += mdec.x;
+					my += mdec.y;
+
+					if(mx < 0) {
+						mx = 0;
+					}
+
+					if(my < 0) {
+						my = 0;
+					}
+
+					if(mx > binfo->scrnx - 16) {
+						mx = binfo->scrnx - 16;
+					}
+
+					if(my > binfo->scrny - 16) {
+						my = binfo->scrny - 16;
+					}
+					sprintf(buffer, "(%3d, %3d)", mx, my);
+					boxfill8(binfo->vram, binfo->scrnx, COL8_008484, 0, 0, 79, 15);
+					putfonts8_asc(binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, buffer);
+					putblock8_8(binfo->vram, binfo->scrnx, 16, 16, mx, my, mouse, 16);
 				}
 			}
 		}
@@ -163,7 +191,7 @@ int mouse_decode(struct MOUSE_DEC *mdec, unsigned char dat)
 		mdec->x = mdec->buf[1];
 		mdec->y = mdec->buf[2];
 
-		/* mask for directions - also stored in the first byte */
+		/* mask for direction - also stored in the first byte, the corordinates values are stored in buf[1] and buf[2] */
 		if((mdec->buf[0] & 0x10) != 0) {
 			mdec->x |= 0xffffff00;
 		}
