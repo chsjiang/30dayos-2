@@ -1,0 +1,1 @@
+starting day 8, decoding the three interruption bytes retured by moving mouse, which button is clicked(left/center/right) is in the first byte, its coordinates is in second and third byte.
