@@ -1,9 +1,23 @@
 #include <stdio.h>
 #include "bootpack.h"
 
+#define MEMMAN_FREES 	4090	/* around 32K */
+#define MEMMAN_ADDR		0x003c0000
+struct FREEINFO 
+{
+	unsigned int addr, size;
+};
 
-unsigned int memtest_sub(unsigned int start, unsigned int end);
+struct MEMMAN
+{
+	int frees, maxfrees, lostsize, losts;
+	struct FREEINFO free[MEMMAN_FREES];
+};
 unsigned int memtest(unsigned int start, unsigned int end);
+void memman_init(struct MEMMAN *man);
+unsigned int memman_total(struct MEMMAN *man);
+unsigned int memman_alloc(struct MEMMAN *man, unsigned int size);
+int memman_free(struct MEMMAN *man, unsigned int addr, unsigned int size);
 
 void HariMain(void)
 {	
@@ -17,6 +31,7 @@ void HariMain(void)
 	init_screen8(binfo->vram, binfo->scrnx, binfo->scrny);	
 
 	int mx, my, i;
+	unsigned int memtotal;
 	mx = (binfo->scrnx - 16) / 2;
 	my = (binfo->scrny - 20 - 16) / 2;
 	/* mouse is generating way more interruption than key, therefore we bump up the buffer to 128 */
@@ -39,9 +54,13 @@ void HariMain(void)
 	struct MOUSE_DEC mdec;
 	enable_mouse(&mdec);
 
-
-	i = memtest(0x00400000, 0xbfffffff) / (1024 * 1024); /* convert byte into MB */
-	sprintf(buffer, "memory %dMB", i);
+	/* initialize memory management */
+	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
+	memtotal = memtest(0x00400000, 0xbfffffff); /* byte */
+	memman_init(memman);
+	memman_free(memman, 0x00001000, 0x0009e000);
+	memman_free(memman, 0x00400000, memtotal - 0x00400000);
+	sprintf(buffer, "memory %dMB    free : %dKB", memtotal/(1024 * 1024), memman_total(memman)/1024);
 	putfonts8_asc(binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, buffer);
 
 	/*
@@ -175,16 +194,27 @@ unsigned int memtest(unsigned int start, unsigned int end)
 	then we read from memory, if the value is actually reversed, then we know this memory is valid
 		otherwise we break, the current point will be pointing to the correct max memory, will return that
 	if memroy is valid then we advance pointer to probe the next memory unit, each time we advance 4kb
+
+	0xffc is 1111 1111 1100, we are only checking that last 4 bytes in each loop
+	each loop we advance the pointer for 4kb
 */
-		
+
+/*
+	Note the compiler will check the condition and optimize code before it's actually compiled,
+	Compiler isn't aware of cache or memory check
+	since here *p is bound to qual pat1/pat0 after flipping, compiler will ignore the if condition,
+	then we left old = *p; *p = old; which doesn't do anything, this will also be ignored.
+	then all unused vars are ignored, left this function only a empty for loop to be compiled
+	therefore this method won't return the actualy memory but always return 3072MB as the for loop never breaks
+	can see the assembly code in bootpack.nas make -r bootpack.nas
+	Therefore in order to get the correct memory value, we need to implement memtest_sub in assembly in naskfun.nas
+*/		
+/*
 unsigned int memtest_sub(unsigned int start, unsigned int end)
 {
 	unsigned int i, *p, old, pat0 = 0xaa55aa55, pat1 = 0x55aa55aa;
-	for(i = start; i < end; i += 0x1000) {
-		/* 
-			0xffc is 1111 1111 1100, we are only checking that last 4 bytes in each loop
-			each loop we advance the pointer for 4kb
-		*/
+	for(i = start; i <= end; i += 0x1000) {
+		
 		p = (unsigned int *)(i + 0xffc); 
 		old = *p;
 		*p = pat0;
@@ -201,4 +231,124 @@ unsigned int memtest_sub(unsigned int start, unsigned int end)
 		*p = old;
 	}
 	return i;
+}
+*/
+
+
+
+void memman_init(struct MEMMAN *man)
+{
+	/* Note: when initialized, frees should be 0, it will be increased by mamman_free */
+	man->frees = 0;
+	/* maxfrees is used for statistics */
+	man->maxfrees = 0;
+	man->losts = 0;
+	man->lostsize = 0;
+	return;
+}
+
+/* calculate availe free memory */
+unsigned int memman_total(struct MEMMAN *man)
+{
+	unsigned int size = 0, i;
+	for(i = 0; i < man->frees; i++) {
+		size += man->free[i].size;
+	}
+	return size;
+}
+
+unsigned int memman_alloc(struct MEMMAN *man, unsigned int size)
+{
+	unsigned int i, a = 0;
+	for(i = 0; i < man->frees; i++) {
+		if(man->free[i].size >= size)
+		{
+			a = man->free[i].addr; 
+			man->free[i].addr += size;
+			man->free[i].size -= size;
+		}
+		/* if this block is drained, remote it from man->free[] */
+		if(man->free[i].size == 0) {
+			man->frees--;
+			for(; i < man->frees; i++)
+			{
+				man->free[i] = man->free[i+1];
+			}
+		}
+		return a;
+	}
+	/* failed to find an available free block */
+	return 0;
+}
+
+int memman_free(struct MEMMAN *man, unsigned int addr, unsigned int size)
+{
+	int i, j;
+	/* we need to manage memory sequencially, find the correct place to insert first */
+	for(i = 0; i < man->frees; i++) {
+		if(man->free[i].addr > addr) {
+			break;
+		}
+	}
+
+	/* there's free block before */
+	if( i > 0 )
+	{
+		/* if the previous block is consequtive, then we need to merge this with previous */
+		if(man->free[i-1].addr + man->free[i-1].size == addr)
+		{
+			man->free[i-1].size += size;
+			/* need to check if we can merge with next block */
+			if( i < man->frees )
+			{
+				if(addr + size == man->free[i].addr)
+				{
+					man->free[i-1].size += man->free[i].size;
+					man->frees--;
+					for(; i < man->frees; i++)
+					{
+						man->free[i] = man->free[i+1];
+					}
+				}
+			}
+			return 0;
+		}
+	}
+
+	/* there's no free block before and there's free block after */
+	if( i < man->frees )
+	{
+		if(addr + size == man->free[i].addr)
+		{
+			man->free[i].addr = addr;
+			man->free[i].size += size;
+			return 0;
+		}
+	}
+
+	/* there's no free block before and there's no free block after */
+	/* do this check to avoid we overrun MEMMAN_FREES */
+	if( i < MEMMAN_FREES )
+	{
+		/* note for here j is overflowed by one intentionally */
+		for(j = man->frees; j > i; j--)
+		{
+			man->free[j] = man->free[j-1];
+		}
+		man->frees++;
+		if(man->maxfrees < man->frees)
+		{
+			man->maxfrees = man->frees;
+		}
+		man->free[i].addr = addr;
+		man->free[i].size = size;
+		return 0;
+	}
+
+	/* 
+		if we reach here then it means we need to create a new block 
+		but there's already MEMMAN_FREES blocks allocated
+	*/
+		man->losts++;
+		man->lostsize += size;
 }
