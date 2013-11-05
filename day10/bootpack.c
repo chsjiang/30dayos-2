@@ -54,6 +54,7 @@ void HariMain(void)
 	/* we are makeing background color transparent */
 	init_mouse_cursor8(buf_mouse, 99);
 	/* offset the background layer to 0, 0 */
+	/* will redraw the entire screen */
 	sheet_slide(shtctl, sht_back, 0, 0);
 	mx = (binfo->scrnx - 16) / 2;
 	my = (binfo->scrny - 20 - 16) / 2;
@@ -68,10 +69,14 @@ void HariMain(void)
 
 	/* print memory */
 	sprintf(buffer, "memory %dMB    free : %dKB", memtotal/(1024 * 1024), memman_total(memman)/1024);
-	putfonts8_asc(binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, buffer);
+	putfonts8_asc(buf_back, binfo->scrnx, 0, 32, COL8_FFFFFF, buffer);
 
-	/* note now refresh will be drawing all layers, including background and mouse */
-	sheet_refresh(shtctl);
+	/* 
+		each time we call sheet_refresh, we need to know which sheet we're redrawing and the area to be redrawn 
+		this call is only fro redrawing the three lines of text
+	*/
+
+	sheet_refresh(shtctl, sht_back, 0, 0, binfo->scrnx, 48);
 
 
 	/*
@@ -91,7 +96,7 @@ void HariMain(void)
 				sprintf(buffer, "%02X", i);
 				boxfill8(buf_back, binfo->scrnx, COL8_008484, 0, 16, 15, 31);
 				putfonts8_asc(buf_back, binfo->scrnx, 0, 16, COL8_FFFFFF, buffer);
-				sheet_refresh(shtctl);
+				sheet_refresh(shtctl, sht_back, 0, 16, 16, 32);
 			} 
 			/* we handle keyboard int in higher priority */
 			else if(fifo8_status(&mousefifo) != 0) {
@@ -110,8 +115,10 @@ void HariMain(void)
 					if((mdec.btn & 0x04) != 0) {
 						buffer[2] = 'C';
 					}
+					/* redraw which key is pressed */
 					boxfill8(buf_back, binfo->scrnx, COL8_008484, 32, 16, 32 + 15 * 8 - 1, 31);
 					putfonts8_asc(buf_back, binfo->scrnx, 32, 16, COL8_FFFFFF, buffer);
+					sheet_refresh(shtctl, sht_back, 32, 16, 32+15*8, 32);
 
 					/* move mouse */
 					mx += mdec.x;
@@ -137,8 +144,15 @@ void HariMain(void)
 					boxfill8(buf_back, binfo->scrnx, COL8_008484, 0, 0, 79, 15);
 					/* wirte new coordinates */
 					putfonts8_asc(buf_back, binfo->scrnx, 0, 0, COL8_FFFFFF, buffer);
-					/* offset the mouse layer and repaint */
+					/* 
+						offset the mouse layer and repaint, note sheet_slide will only repaint the mouse layer-
+						the coordinates won't be repaint! need to call sheet_refresh to repaint those area
+					*/
+					/* redraw cursor */
 					sheet_slide(shtctl, sht_mouse, mx, my);
+					/* redraw coordinates */
+					sheet_refresh(shtctl, sht_back, 0, 0, 80, 16);
+					
 				}
 			}
 		}

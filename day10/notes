@@ -1,4 +1,5 @@
 we revamped the way to draw components on screen today, instead of writing to vram directly, we defined a structure to represent the screen in multiple 'sheets' or 'layers' that are stacked to gether. when drawing, we cover one layer over another sequentially, and the finlal results would be actually paint.
 With this mechanisim in place, we'll be alble to draw 'transparent' color, for instance in the mouse layer, the only color we cover is the cursor it self, all other part of the squre is left transparent and is not being 'peanut buttered' over the layer - since the lower layer already has correct color set and the mouse layer does'nt do any thing for the same pixel, the pixel will be left with correct background color.
 
+when redrawing the stack, we iterate all stacks, for each stack, instead of drawing the entire layer, we only redraw the INTERSECTION AREA of the stack and area to be redrawn - this will greatly enhance its performance.
 

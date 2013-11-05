@@ -98,12 +98,58 @@ void sheet_updown(struct SHTCTL *ctl, struct SHEET *sht, int height) {
 			ctl->top++;
 		}
 	}
-	sheet_refresh(ctl);
+	sheet_refresh(ctl, sht, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize);
 	return;
 }
 
 /* recheck the stack and paint to vram */
-void sheet_refresh(struct SHTCTL *ctl) {
+void sheet_refresh(struct SHTCTL *ctl, struct SHEET *sht, int bx0, int by0, int bx1, int by1) {
+	if(sht->height >= 0) {
+		/* (bx0, by0) and (bx1, by1) are the coordinates within this sheet, need to transfer it to absolute coordinates */
+		sheet_refreshsub(ctl, sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1);
+	}
+	return;
+}
+
+/* only redraw(write mem addr to) a sub area */
+void sheet_refreshsub1(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1) {
+	int h, bx, by;
+	int xstart, xend, ystart, yend;
+	unsigned char *buf, color, *vram = ctl->vram;
+	struct SHEET* sht;
+	for(h = 0; h <= ctl->top; h++) {
+		sht = ctl->sheets[h];
+		buf = sht->buf;
+		/* calculating the intersection of area to be redrawn and this layer, only draw the intersection area */
+		xstart = vx0 > sht->vx0 ? vx0 : sht->vx0;
+		xend = vx1 < (sht->vx0 + sht->bxsize) ? vx1 : (sht->vx0 + sht->bxsize);
+		ystart = vy0 > sht->vy0 ? vy0 : sht->vy0;
+		yend = vy1 < (sht->vy0 + sht->bysize) ? vy1 : (sht->vy0 + sht->bysize);
+
+		for(by = ystart; by < yend; by++) {
+			for(bx = xstart; bx < xend; bx++) {
+				/* 
+					get the color of this pixel from buf 
+					when getting it from buf, the coordinates should still be relative coordinates
+					now that bx, by is absolute coordinates, we have
+						relativeX + sht->vx0 = bx
+					can get 
+						relativeX = bx - sht->bx0
+						relativeY = by - sht->by0
+				*/
+				color = buf[(by - sht->vy0) * sht->bxsize + (bx - sht->vx0)];
+				if(color != sht->col_inv) {
+					/* write to vram, now should use absolute coordinates */
+					vram[by*ctl->xsize + bx] = color;
+				}
+			}
+		}
+	}
+	return;
+}
+
+/* only redraw(write mem addr to) a sub area */
+void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1) {
 	int h, bx, by, vx, vy;
 	unsigned char *buf, color, *vram = ctl->vram;
 	struct SHEET* sht;
@@ -120,11 +166,41 @@ void sheet_refresh(struct SHTCTL *ctl) {
 					when getting it from buf, the coordinates should still be relative coordinates
 				*/
 				color = buf[by * sht->bxsize + bx];
+				/* only redraw when the pixel falls within the sub area */
+				if(vx0 <= vx && vx < vx1 & vy0 <= vy && vy < vy1) {
+					if(color != sht->col_inv) {
+						/* write to vram, now should use absolute coordinates */
+						vram[vy*ctl->xsize + vx] = color;
+					}
+				}
+			}
+		}
+	}
+	return;
+}
+
+void sheet_refresh_all(struct SHTCTL *ctl) {
+	int h, bx, by, vx, vy;
+	unsigned char *buf, color, *vram = ctl->vram;
+	struct SHEET* sht;
+	for(h = 0; h <= ctl->top; h++) {
+		sht = ctl->sheets[h];
+		buf = sht->buf;
+		for(by = 0; by < sht->bysize; by++) {
+			/* convert sht relative coordinates to absolute coordinates */
+			vy = sht->vy0 + by;
+			for(bx = 0; bx < sht->bxsize; bx++) {
+				vx = sht->vx0 + bx;
+				/* 
+					get the color of this pixel from buf 
+					when getting it from buf, the coordinates should still be relative coordinates
+				*/
+				color = buf[by * sht->bxsize + bx];
+				/* only redraw when the pixel falls within the sub area */
 				if(color != sht->col_inv) {
 					/* write to vram, now should use absolute coordinates */
 					vram[vy*ctl->xsize + vx] = color;
 				}
-
 			}
 		}
 	}
@@ -133,11 +209,17 @@ void sheet_refresh(struct SHTCTL *ctl) {
 
 /* move a single sheet without chaning its height, still need to sheet_refresh */
 void sheet_slide(struct SHTCTL *ctl, struct SHEET *sht, int vx0, int vy0) {
+	int oldx = sht->vx0, oldy = sht->vy0;
 	sht->vx0 = vx0;
 	sht->vy0 = vy0;
 	/* only repaint if this sheet is being displayed */
 	if(sht->height >= 0) {
+		/* only redraw the area before and after */
+		/*
 		sheet_refresh(ctl);
+		*/
+		sheet_refreshsub(ctl, oldx, oldy, oldx+sht->bxsize, oldy+sht->bysize);
+		sheet_refreshsub(ctl, vx0, vy0, vx0+sht->bxsize, vy0+sht->bysize);
 	}
 	return;
 }
