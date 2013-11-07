@@ -204,7 +204,7 @@ struct SHEET {
 
 /* sheet control, will be used to assign new sheets and sort the stack of used sheets */
 struct SHTCTL {
-	unsigned char *vram;
+	unsigned char *vram, *map;
 	int xsize, ysize; /* xsize and ysize is used to buffer binfo->scrnx and binfo->scrny */
 	int top; /* top is the upper most layer */
 	/* pointers to sheet, only top sheets are to be stacked */
@@ -216,7 +216,8 @@ struct SHTCTL {
 struct SHTCTL *shtctl_init(struct MEMMAN *memman, unsigned char *vram, short xsize, short ysize);
 struct SHEET *sheet_alloc(struct SHTCTL* ctl);
 void sheet_setbuf(struct SHEET *sht, unsigned char *buf, int xisze, int ysize, int col_inv);
-void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1);
+void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1, int h0, int h1);
+void sheet_refreshmap(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1, int h0);
 void sheet_updown(struct SHEET *sht, int height);
 void sheet_refresh(struct SHEET *sht, int bx0, int by0, int bx1, int by1);
 void sheet_refresh_all(struct SHTCTL *ctl);

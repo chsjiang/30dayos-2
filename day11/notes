@@ -1,1 +1,2 @@
 leverage the layer stacking to implement window
+improve laying performance, now besides having a stack of layers, we also have a map to record which layer is at the top at each pixel - when we do refreshsub, vram WILL ONLY BE WRITTEN ONCE( though we are still iterating all layers, but opt out the layer that's not on top by inquring map). Doing this will improve some performance and avoid flashing - if in one loop we write vram couple of times, it will flash, with map in place we only write each pixel on vram once, thus flash is gone

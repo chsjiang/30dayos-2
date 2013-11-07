@@ -15,7 +15,7 @@ void HariMain(void)
 	init_screen8(binfo->vram, binfo->scrnx, binfo->scrny);	
 
 	int mx, my, i;
-	unsigned int memtotal;
+	unsigned int memtotal, count = 0;
 	/* mouse is generating way more interruption than key, therefore we bump up the buffer to 128 */
 	char buffer[40], keybuf[32], mousebuf[128];
 
@@ -49,14 +49,11 @@ void HariMain(void)
 	sht_win = sheet_alloc(shtctl);
 	/* buf_back will cover the entire screen, therefore we need binfo->scrnx * binfo->scrny bytes */
 	buf_back = (unsigned char *)memman_alloc_4k(memman, binfo->scrnx * binfo->scrny);
-	buf_win = (unsigned char *)memman_alloc_4k(memman, 160 * 68);
+	buf_win = (unsigned char *)memman_alloc_4k(memman, 160 * 52);
 	/* no invisible color */
 	sheet_setbuf(sht_back, buf_back, binfo->scrnx, binfo->scrny, -1);
-	sheet_setbuf(sht_win, buf_win, 160, 68, -1);
-	make_window8(buf_win, 160, 68, "window");
-	/* Note (25, 28) would be relative coordinates! */
-	putfonts8_asc(buf_win, 160, 24, 28, COL8_000000, "Welcome to");
-	putfonts8_asc(buf_win, 160, 24, 44, COL8_000000, "  MLGB-OS!");
+	sheet_setbuf(sht_win, buf_win, 160, 52, -1);
+	make_window8(buf_win, 160, 52, "window");
 
 	init_screen8(buf_back, binfo->scrnx, binfo->scrny);
 	/* visible color is 99, this layer for mouse is only 16*16 */
@@ -95,11 +92,16 @@ void HariMain(void)
 		this loop will keep looking at keybuf, if an interruption happens and keybuf is set then it prints the data
 	*/
 	for(;;) {
+		count++;
+		sprintf(buffer, "%010d", count);
+		boxfill8(buf_win, 160, COL8_C6C6C6, 40, 28, 119, 43);
+		putfonts8_asc(buf_win, 160, 40, 28, COL8_000000, buffer);
+		sheet_refresh(sht_win, 40, 28, 120, 44);
+
 		io_cli();
 		/* use unbounded buffer */
-		/* check size first */
 		if(fifo8_status(&keyfifo) + fifo8_status(&mousefifo) == 0) {
-			io_stihlt();
+			io_sti();
 		} else {
 			if(fifo8_status(&keyfifo) != 0) {
 				/* i can't be -1 as we already checked size */
@@ -171,7 +173,7 @@ void HariMain(void)
 	}
 }
 
-/* similar to init_screen8 */
+/* similar to init_screen8, create a window with X and title */
 void make_window8(unsigned char* buf, int xsize, int ysize, char *title) {
 	static char closebtn[14][16] = {
 		"OOOOOOOOOOOOOOO@",

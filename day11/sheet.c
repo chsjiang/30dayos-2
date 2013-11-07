@@ -7,6 +7,11 @@ struct SHTCTL *shtctl_init(struct MEMMAN *memman, unsigned char *vram, short xsi
 	if (ctl == 0) {
 		return ctl;
 	}
+	ctl->map = (unsigned char*)memman_alloc_4k(memman, xsize * ysize);
+	if(ctl->map == 0) {
+		memman_free_4k(memman, (int) ctl, sizeof (struct SHTCTL));
+		return ctl;
+	}
 	ctl->vram = vram;
 	ctl->xsize = xsize;
 	ctl->ysize = ysize;
@@ -70,6 +75,9 @@ void sheet_updown(struct SHEET *sht, int height) {
 				ctl->sheets[h]->height = h;
 			}
 			ctl->sheets[height] = sht;
+			/* this layer is still on screen, we only need to redraw the layers on top of it */
+			sheet_refreshmap(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize, sht->height + 1);
+			sheet_refreshsub(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize, sht->height + 1, old);
 		} 
 		/* else height==-1 we need to remove it from ctl->sheets[] */
 		else {
@@ -84,8 +92,10 @@ void sheet_updown(struct SHEET *sht, int height) {
 				}
 			}	
 			ctl->top--;
+			/* this layer is removed, we need to redraw everything */ 
+			sheet_refreshmap(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize, 0);
+			sheet_refreshsub(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize, 0, old - 1);
 		}
-		sheet_refreshsub(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize);
 	} 
 	/* move it to a higher height */
 	else if(old < height) {
@@ -105,26 +115,33 @@ void sheet_updown(struct SHEET *sht, int height) {
 			ctl->sheets[height] = sht;
 			ctl->top++;
 		}
-		sheet_refreshsub(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize);
+		/* this layer is lifted, only draw from its height and above */
+		sheet_refreshmap(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize, sht->height);
+		sheet_refreshsub(ctl, sht->vx0, sht->vy0, sht->vx0 + sht->bxsize, sht->vy0 + sht->bysize, sht->height, sht->height);
 	}
 	
 	return;
 }
 
-/* recheck the stack and paint to vram */
+/* recheck the stack and paint to vram, we need to refresh stack from the height of this layer and up */
 void sheet_refresh(struct SHEET *sht, int bx0, int by0, int bx1, int by1) {
 	struct SHTCTL *ctl = sht->ctl;
 	if(sht->height >= 0) {
 		/* (bx0, by0) and (bx1, by1) are the coordinates within this sheet, need to transfer it to absolute coordinates */
-		sheet_refreshsub(ctl, sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1);
+		sheet_refreshsub(ctl, sht->vx0 + bx0, sht->vy0 + by0, sht->vx0 + bx1, sht->vy0 + by1, sht->height, sht->height);
 	}
 	return;
 }
 
-/* only redraw(write mem addr to) a sub area */
-void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1) {
+/* 
+	only redraw(write mem addr to) a sub area 
+	and only refresh from height h0 and up
+	when we want to refresh a window, we can check from the stack of the window 
+	and ignore layer beneath(like background or other window that's blocked)
+*/
+void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1, int h0, int h1) {
 	int h, bx, by, vx, vy;
-	unsigned char *buf, color, *vram = ctl->vram;
+	unsigned char *buf, color, *vram = ctl->vram, sid, *map = ctl->map;
 	if(vx0 < 0) {
 		vx0 = 0;
 	}
@@ -138,9 +155,53 @@ void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1) {
 		vy1 = ctl->ysize;
 	}
 	struct SHEET* sht;
-	for(h = 0; h <= ctl->top; h++) {
+	for(h = h0; h <= h1; h++) {
 		sht = ctl->sheets[h];
 		buf = sht->buf;
+		sid = sht - ctl->sheets0;
+		for(by = 0; by < sht->bysize; by++) {
+			/* convert sht relative coordinates to absolute coordinates */
+			vy = sht->vy0 + by;
+			for(bx = 0; bx < sht->bxsize; bx++) {
+				vx = sht->vx0 + bx;
+				/* 
+					get the color of this pixel from buf 
+					when getting it from buf, the coordinates should still be relative coordinates
+				*/
+				color = buf[by * sht->bxsize + bx];
+				/* only redraw when the pixel falls within the sub area */
+				if(vx0 <= vx && vx < vx1 && vy0 <= vy && vy < vy1) {
+					if(map[vy*ctl->xsize + vx] == sid) {
+						/* write to vram, now should use absolute coordinates */
+						vram[vy*ctl->xsize + vx] = color;
+					}
+				}
+			}
+		}
+	}
+	return;
+}
+
+void sheet_refreshmap(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1, int h0) {
+	int h, bx, by, vx, vy;
+	unsigned char *buf, color, *map = ctl->map, sid;
+	if(vx0 < 0) {
+		vx0 = 0;
+	}
+	if(vy0 < 0) {
+		vy0 = 0;
+	}
+	if(vx1 > ctl->xsize) {
+		vx1 = ctl->xsize;
+	}
+	if(vy1 > ctl->ysize) {
+		vy1 = ctl->ysize;
+	}
+	struct SHEET* sht;
+	for(h = h0; h <= ctl->top; h++) {
+		sht = ctl->sheets[h];
+		buf = sht->buf;
+		sid = sht - ctl->sheets0;
 		for(by = 0; by < sht->bysize; by++) {
 			/* convert sht relative coordinates to absolute coordinates */
 			vy = sht->vy0 + by;
@@ -155,7 +216,7 @@ void sheet_refreshsub(struct SHTCTL *ctl, int vx0, int vy0, int vx1, int vy1) {
 				if(vx0 <= vx && vx < vx1 && vy0 <= vy && vy < vy1) {
 					if(color != sht->col_inv) {
 						/* write to vram, now should use absolute coordinates */
-						vram[vy*ctl->xsize + vx] = color;
+						map[vy*ctl->xsize + vx] = sid;
 					}
 				}
 			}
@@ -201,11 +262,14 @@ void sheet_slide(struct SHEET *sht, int vx0, int vy0) {
 	/* only repaint if this sheet is being displayed */
 	if(sht->height >= 0) {
 		/* only redraw the area before and after */
-		/*
-		sheet_refresh(ctl);
+		/* 
+			the old area needs to be redrawn from layer 0 - because it's removed 
+			new aread can be redrawn from its height
 		*/
-		sheet_refreshsub(ctl, oldx, oldy, oldx+sht->bxsize, oldy+sht->bysize);
-		sheet_refreshsub(ctl, vx0, vy0, vx0+sht->bxsize, vy0+sht->bysize);
+		sheet_refreshmap(ctl, oldx, oldy, oldx+sht->bxsize, oldy+sht->bysize, 0);
+		sheet_refreshsub(ctl, oldx, oldy, oldx+sht->bxsize, oldy+sht->bysize, 0, sht->height-1);
+		sheet_refreshmap(ctl, vx0, vy0, vx0+sht->bxsize, vy0+sht->bysize, sht->height);
+		sheet_refreshsub(ctl, vx0, vy0, vx0+sht->bxsize, vy0+sht->bysize, sht->height, sht->height);
 	}
 	return;
 }
