@@ -1,0 +1,21 @@
+#include "bootpack.h"
+
+/* once this returns we can send mode setting instruction data to keyboard */
+void wait_KBC_sendready(void)
+{
+	while(1) {
+		/* if succeed, the last but two bit should be 0 */
+		if((io_in8(PORT_KEYSTA) & KEYSTA_SEND_NOTREADY) == 0) {
+			break;
+		}
+	}
+	return;
+}
+
+void init_keyboard(void)
+{
+	wait_KBC_sendready();
+	io_out8(PORT_KEYCMD, KEYCMD_WRITE_MODE);
+	wait_KBC_sendready();
+	io_out8(PORT_KEYDAT, KBC_MODE);
+}

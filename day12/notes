@@ -1,0 +1,1 @@
+day12: handling timer interruption by adding support to IRQ0 and initializing PIC(Programmable interrupt controller)
