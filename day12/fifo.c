@@ -4,7 +4,7 @@
 
 void fifo8_init(struct FIFO8 *fifo, int size, unsigned char* buf)
 {
-	fifo->data = buf;
+	fifo->data = buf; 
 	fifo->size = size;
 }
 
