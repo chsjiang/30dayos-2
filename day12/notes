@@ -1,1 +1,3 @@
 day12: handling timer interruption by adding support to IRQ0 and initializing PIC(Programmable interrupt controller)
+define a timer control structure to manage multiple timers, the idea is keep a counter in timer control and each timer has a timeout value, each time the counter increments, check counter with each allocated timer's timeout, if matches, this timer is timeout and a signal is sent to its fifo.
+Have been using a pointer array in timer ctrol to expediate process of matching count and timeout.

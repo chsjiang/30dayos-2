@@ -236,8 +236,10 @@ struct TIMER {
 };
 
 struct TIMERCTL {
-	unsigned int count;
-	struct TIMER timers[MAX_TIMER];
+	/*next is the next epoch that would */
+	unsigned int count, next, using;
+	struct TIMER timers0[MAX_TIMER];
+	struct TIMER *timers[MAX_TIMER];
 };
 
 extern struct TIMERCTL timerctl;

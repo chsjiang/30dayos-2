@@ -19,9 +19,11 @@ void init_pit(void) {
 	io_out8(PIT_CNT0, 0x9c); /* least significant 8 bits */
 	io_out8(PIT_CNT0, 0x2e); /* most significant 8 bits */
 	timerctl.count = 0;
+	timerctl.next = 0xffffffff;
+	timerctl.using = 0;
 	int i;
 	for(i = 0; i < MAX_TIMER; i++) {
-		timerctl.timers[i].flags = 0;
+		timerctl.timers0[i].flags = 0;
 	}
 	return;
 }
@@ -29,9 +31,9 @@ void init_pit(void) {
 struct TIMER *timer_alloc(void) {
 	int i;
 	for(i = 0; i < MAX_TIMER; i++) {
-		if(timerctl.timers[i].flags == 0) {
-			timerctl.timers[i].flags = TIMER_FLAGS_ALLOC;
-			return &timerctl.timers[i];
+		if(timerctl.timers0[i].flags == 0) {
+			timerctl.timers0[i].flags = TIMER_FLAGS_ALLOC;
+			return &timerctl.timers0[i];
 		}
 	}
 	/* no more available timer */
@@ -52,24 +54,62 @@ void timer_init(struct TIMER *timer, struct FIFO8 *timerfifo, unsigned char data
 }
 
 void timer_settime(struct TIMER *timer, unsigned int timeout) {
-	timer->timeout = timeout;
+	int flags, i, j;
+	
+	/* need to disable interruption during registration */
+	flags = io_load_eflags();
+	io_cli();
+	timer->timeout = timerctl.count + timeout;
 	timer->flags = TIMER_FLAGS_USING;
+
+	/* insert the timer pointer to the correct place */
+	for(i = 0; i < timerctl.using; i++) {
+		if(timerctl.timers[i]->timeout >= timer->timeout) {
+			break;
+		}
+	}
+	
+	/* offset a bucket for new timer */
+	for(j = timerctl.using; j > i; j--) {
+		timerctl.timers[j] = timerctl.timers[j-1];
+	}
+	timerctl.using++;
+	timerctl.timers[j] = timer;
+
+	timerctl.next = timerctl.timers[0]->timeout;
+	timer->flags = TIMER_FLAGS_USING;
+	io_store_eflags(flags);
 	return;
 }
 
 void inthandler20(int *esp) {
 	io_out8(PIC0_OCW2, 0x60); /* notify PIC this signal is consumed */
 	timerctl.count++;
-	int i;
-	/* each time an interruption arrives, we decrement timeout of each allocated timer */
-	for(i = 0; i < MAX_TIMER; i++) {
-		if(timerctl.timers[i].flags == TIMER_FLAGS_USING) {
-			timerctl.timers[i].timeout--;
-			if(timerctl.timers[i].timeout == 0) {
-				timerctl.timers[i].flags = TIMER_FLAGS_ALLOC;
-				fifo8_put(timerctl.timers[i].fifo, timerctl.timers[i].data);
-			}
+	int i, j;
+	/* we know the closet timeout is next, if current epoch is smaller than next than we don't need to check */
+	if(timerctl.count < timerctl.next) {
+		return;
+	}
+
+	/* we only search for up to using timers */
+	for(i = 0; i < timerctl.using; i++) {
+		if(timerctl.timers[i]->timeout > timerctl.count) {
+			break;	
 		}
+		timerctl.timers[i]->flags = TIMER_FLAGS_ALLOC;
+		fifo8_put(timerctl.timers[i]->fifo, timerctl.timers[i]->data);
+	}
+	timerctl.using -= i;
+	/* remove the first i time out timers, offset the rest to top(if at all) */
+	for(j = 0; j < i; j++) {
+		timerctl.timers[j] = timerctl.timers[j+i];
+	}
+
+	/* update next, since timers[] are alyways sorted, timerctl.next only needs to point to its head */
+	if(timerctl.using == 0) {
+		timerctl.next = 0xffffffff;
+	} else {
+		timerctl.next = timerctl.timers[0]->timeout;
 	}
 	return;
 }
