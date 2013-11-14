@@ -58,9 +58,11 @@ void timer_settime(struct TIMER *timer, unsigned int timeout) {
 	
 	/* need to disable interruption during registration */
 	flags = io_load_eflags();
-	io_cli();
+
 	timer->timeout = timerctl.count + timeout;
 	timer->flags = TIMER_FLAGS_USING;
+
+	io_cli();
 
 	/* insert the timer pointer to the correct place */
 	for(i = 0; i < timerctl.using; i++) {
@@ -77,10 +79,10 @@ void timer_settime(struct TIMER *timer, unsigned int timeout) {
 	timerctl.timers[j] = timer;
 
 	timerctl.next = timerctl.timers[0]->timeout;
-	timer->flags = TIMER_FLAGS_USING;
 	io_store_eflags(flags);
 	return;
 }
+
 
 void inthandler20(int *esp) {
 	io_out8(PIC0_OCW2, 0x60); /* notify PIC this signal is consumed */
@@ -101,15 +103,15 @@ void inthandler20(int *esp) {
 	}
 	timerctl.using -= i;
 	/* remove the first i time out timers, offset the rest to top(if at all) */
-	for(j = 0; j < i; j++) {
+	for(j = 0; j < timerctl.using; j++) {
 		timerctl.timers[j] = timerctl.timers[j+i];
 	}
 
-	/* update next, since timers[] are alyways sorted, timerctl.next only needs to point to its head */
-	if(timerctl.using == 0) {
-		timerctl.next = 0xffffffff;
-	} else {
+	/* update next, since timers[] are always sorted, timerctl.next only needs to point to its head */
+	if(timerctl.using > 0) {
 		timerctl.next = timerctl.timers[0]->timeout;
+	} else {
+		timerctl.next = 0xffffffff;
 	}
 	return;
 }

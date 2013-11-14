@@ -3,6 +3,7 @@
 
 void make_window8(unsigned char* buf, int xsize, int ysize, char *title);
 void putfonts8_asc_sht(struct SHEET *sht, int x, int y, int c, int b, char*s, int l);
+void debug(struct SHEET* sht_back);
 
 void HariMain(void)
 {	
@@ -15,11 +16,11 @@ void HariMain(void)
 	
 	init_screen8(binfo->vram, binfo->scrnx, binfo->scrny);	
 
-	int mx, my, i;
+	int mx, my, i, count = 0;
 	unsigned int memtotal;
-	struct FIFO8 timerfifo, timerfifo2, timerfifo3;
+	struct FIFO8 timerfifo;
 	/* mouse is generating way more interruption than key, therefore we bump up the buffer to 128 */
-	char buffer[40], keybuf[32], mousebuf[128], timerbuf[8], timerbuf2[8], timerbuf3[8];
+	char buffer[40], keybuf[32], mousebuf[128], timerbuf[8];
 	struct TIMER *timer, *timer2, *timer3;
 
 	/* initiliza pit(programmable interval timer) */
@@ -33,16 +34,15 @@ void HariMain(void)
 	fifo8_init(&keyfifo, 32, keybuf);
 	fifo8_init(&mousefifo, 128, mousebuf);
 	fifo8_init(&timerfifo, 8, timerbuf);
-	fifo8_init(&timerfifo2, 8, timerbuf2);
-	fifo8_init(&timerfifo3, 8, timerbuf3);
 
 	/* initliaze timers */
 	timer = timer_alloc();
 	timer2 = timer_alloc();
 	timer3 = timer_alloc();
-	timer_init(timer, &timerfifo, 1);
-	timer_init(timer2, &timerfifo2, 1);
-	timer_init(timer3, &timerfifo3, 1);
+	/* timers share a buffer */
+	timer_init(timer, &timerfifo, 10);
+	timer_init(timer2, &timerfifo, 3);
+	timer_init(timer3, &timerfifo, 1);
 	timer_settime(timer, 1000);
 	timer_settime(timer2, 300);
 	/* this one is for drawing a flashing cursor */
@@ -113,14 +113,15 @@ void HariMain(void)
 		this loop will keep looking at keybuf, if an interruption happens and keybuf is set then it prints the data
 	*/
 	for(;;) {
-		/* note: timer count increase 100 times per second! */
-		sprintf(buffer, "%010d", timerctl.count);
-
-		putfonts8_asc_sht(sht_win, 40, 28, COL8_000000, COL8_C6C6C6, buffer, 10);
+		/* 
+		don't need to print count every time, only need to increment it, print the number at 10 seconds to compare performance
+			the more counter the faster
+		*/
+		count++;
 
 		io_cli();
 		/* use unbounded buffer */
-		if(fifo8_status(&keyfifo) + fifo8_status(&mousefifo) + fifo8_status(&timerfifo) + fifo8_status(&timerfifo2) + fifo8_status(&timerfifo3) == 0) {
+		if(fifo8_status(&keyfifo) + fifo8_status(&mousefifo) + fifo8_status(&timerfifo) == 0) {
 			io_sti();
 		} else {
 			if(fifo8_status(&keyfifo) != 0) {
@@ -180,33 +181,35 @@ void HariMain(void)
 					putfonts8_asc_sht(sht_back, 0, 0, COL8_FFFFFF, COL8_008484, buffer, 10);					
 				}
 			} 
-			/* 10 sec timer */
 			else if(fifo8_status(&timerfifo) != 0) {
+				
 				i = fifo8_get(&timerfifo);
+				
 				io_sti();
-				putfonts8_asc(buf_back, binfo->scrnx, 0, 64, COL8_FFFFFF, "10[sec]");
-				sheet_refresh(sht_back, 0, 64, 56, 80);
-			} 
-			/* 3 sec timer */
-			else if(fifo8_status(&timerfifo2) != 0) {
-				i = fifo8_get(&timerfifo2);
-				io_sti();
-				putfonts8_asc(buf_back, binfo->scrnx, 0, 80, COL8_FFFFFF, "3[sec]");
-				sheet_refresh(sht_back, 0, 80, 48, 96);
-			} 
-			/* flash timer */
-			else if(fifo8_status(&timerfifo3) != 0) {
-				i = fifo8_get(&timerfifo3);
-				io_sti();
-				if(i == 0) {
-					timer_init(timer3, &timerfifo3, 1);
-					boxfill8(buf_back, binfo->scrnx, COL8_008484, 8, 96, 15, 111);
-				} else {
-					timer_init(timer3, &timerfifo3, 0);
-					boxfill8(buf_back, binfo->scrnx, COL8_FFFFFF, 8, 96, 15, 111);
+				/* 3 sec timer */
+				if(i == 3) {
+					putfonts8_asc_sht(sht_back, 0, 80, COL8_FFFFFF, COL8_008484, "3[sec]", 6);
+					/* we start to test performance after 3 seconds, this is when program fully warmed up */
+					count = 0;
+				} 
+				/* 10 sec timer */
+				else if(i == 10) {
+					sprintf(buffer, "%010d", count);
+					putfonts8_asc_sht(sht_win, 40, 28, COL8_000000, COL8_C6C6C6, buffer, 10);
+					putfonts8_asc_sht(sht_back, 0, 64, COL8_FFFFFF, COL8_008484, "5[sec]", 7);
+				} 
+				/* flash timer */
+				else  {
+					if(i == 0) {
+						timer_init(timer3, &timerfifo, 1);
+						boxfill8(buf_back, binfo->scrnx, COL8_008484, 8, 96, 15, 111);
+					} else {
+						timer_init(timer3, &timerfifo, 0);
+						boxfill8(buf_back, binfo->scrnx, COL8_FFFFFF, 8, 96, 15, 111);
+					}
+					timer_settime(timer3, 50);
+					sheet_refresh(sht_back, 8, 96, 16, 112);
 				}
-				timer_settime(timer3, 50);
-				sheet_refresh(sht_back, 8, 96, 16, 112);
 			}
 		}
 	}
@@ -268,4 +271,8 @@ void putfonts8_asc_sht(struct SHEET *sht, int x, int y, int color, int backgroun
 	putfonts8_asc(sht->buf, sht->bxsize, x, y, color, s);
 	sheet_refresh(sht, x, y, x + l*8, y+16);
 	return;
+}
+
+void debug(struct SHEET* sht_back) {
+	putfonts8_asc_sht(sht_back, 0, 155, COL8_FFFFFF, COL8_008484, "mlgb", 4);
 }

@@ -43,6 +43,7 @@ int fifo8_get(struct FIFO8 *fifo)
 	}
 }
 
+/* check number of valid entry of this fifo, if it's >0 then return the size */ 
 int fifo8_status(struct FIFO8 *fifo)
 {
 	if(fifo->start < fifo->end) {
