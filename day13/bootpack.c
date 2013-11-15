@@ -18,9 +18,10 @@ void HariMain(void)
 
 	int mx, my, i, count = 0;
 	unsigned int memtotal;
-	struct FIFO8 timerfifo;
+	struct FIFO32 fifo;
 	/* mouse is generating way more interruption than key, therefore we bump up the buffer to 128 */
-	char buffer[40], keybuf[32], mousebuf[128], timerbuf[8];
+	char buffer[40];
+	int fifobuf[128];
 	struct TIMER *timer, *timer2, *timer3;
 
 	/* initiliza pit(programmable interval timer) */
@@ -30,28 +31,26 @@ void HariMain(void)
 	io_out8(PIC0_IMR, 0xf8); /*PIT, PIC1 and keyboard: 11111000 */
 	io_out8(PIC1_IMR, 0xef); /*mouse:11101111*/
 
-	/* initialize unbounded buffer */
-	fifo8_init(&keyfifo, 32, keybuf);
-	fifo8_init(&mousefifo, 128, mousebuf);
-	fifo8_init(&timerfifo, 8, timerbuf);
+	/* now we only have one fifo for handling all signals */
+	fifo32_init(&fifo, 128, fifobuf);
 
 	/* initliaze timers */
 	timer = timer_alloc();
 	timer2 = timer_alloc();
 	timer3 = timer_alloc();
 	/* timers share a buffer */
-	timer_init(timer, &timerfifo, 10);
-	timer_init(timer2, &timerfifo, 3);
-	timer_init(timer3, &timerfifo, 1);
+	timer_init(timer, &fifo, 10);
+	timer_init(timer2, &fifo, 3);
+	timer_init(timer3, &fifo, 1);
 	timer_settime(timer, 1000);
 	timer_settime(timer2, 300);
 	/* this one is for drawing a flashing cursor */
 	timer_settime(timer3, 50);
 
 	/* initilize keyboard and mouse*/
-	init_keyboard();
+	init_keyboard(&fifo, 256);
 	struct MOUSE_DEC mdec;
-	enable_mouse(&mdec);
+	enable_mouse(&fifo, 512, &mdec);
 
 	/* initialize memory management */
 	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
@@ -121,22 +120,22 @@ void HariMain(void)
 
 		io_cli();
 		/* use unbounded buffer */
-		if(fifo8_status(&keyfifo) + fifo8_status(&mousefifo) + fifo8_status(&timerfifo) == 0) {
+		if(fifo32_status(&fifo) == 0) {
 			io_sti();
 		} else {
-			if(fifo8_status(&keyfifo) != 0) {
-				/* i can't be -1 as we already checked size */
-				i = fifo8_get(&keyfifo);
-				io_sti();
-				sprintf(buffer, "%02X", i);
+			i = fifo32_get(&fifo);
+			io_sti();
+			/* keyboard signal */
+			if( i >= 256 && i < 512) {
+				debug(sht_back);
+				sprintf(buffer, "%02X", i - 256);
 				putfonts8_asc_sht(sht_back, 0, 16, COL8_FFFFFF, COL8_008484, buffer, 2);
-			} 
-			/* we handle keyboard int in higher priority */
-			else if(fifo8_status(&mousefifo) != 0) {
-				i = fifo8_get(&mousefifo);
-				io_sti();
-				/* once we have gathered all three signals, print it on screen */
-				if(mouse_decode(&mdec, i) != 0) {
+			}
+			/* mouse signal */
+			else if ( i >= 512 && i <= 767) {
+				debug(sht_back);
+
+				if(mouse_decode(&mdec, i - 512) != 0) {
 					sprintf(buffer, "[lcr %4d %4d]", mdec.x, mdec.y);
 					/* note: unless we realase a button, the mdec.btn mask will always be set and letter will alawys be captial */
 					if((mdec.btn & 0x01) != 0) {
@@ -180,36 +179,26 @@ void HariMain(void)
 
 					putfonts8_asc_sht(sht_back, 0, 0, COL8_FFFFFF, COL8_008484, buffer, 10);					
 				}
-			} 
-			else if(fifo8_status(&timerfifo) != 0) {
-				
-				i = fifo8_get(&timerfifo);
-				
-				io_sti();
-				/* 3 sec timer */
-				if(i == 3) {
+			}
+			/* timer signals */
+			else if(i == 3) {
 					putfonts8_asc_sht(sht_back, 0, 80, COL8_FFFFFF, COL8_008484, "3[sec]", 6);
 					/* we start to test performance after 3 seconds, this is when program fully warmed up */
 					count = 0;
-				} 
-				/* 10 sec timer */
-				else if(i == 10) {
+			} else if (i == 10) {
 					sprintf(buffer, "%010d", count);
 					putfonts8_asc_sht(sht_win, 40, 28, COL8_000000, COL8_C6C6C6, buffer, 10);
-					putfonts8_asc_sht(sht_back, 0, 64, COL8_FFFFFF, COL8_008484, "5[sec]", 7);
-				} 
-				/* flash timer */
-				else  {
-					if(i == 0) {
-						timer_init(timer3, &timerfifo, 1);
-						boxfill8(buf_back, binfo->scrnx, COL8_008484, 8, 96, 15, 111);
-					} else {
-						timer_init(timer3, &timerfifo, 0);
+					putfonts8_asc_sht(sht_back, 0, 64, COL8_FFFFFF, COL8_008484, "10[sec]", 7);
+			} else {
+				if (i == 1) {
+						timer_init(timer3, &fifo, 0);
 						boxfill8(buf_back, binfo->scrnx, COL8_FFFFFF, 8, 96, 15, 111);
-					}
-					timer_settime(timer3, 50);
-					sheet_refresh(sht_back, 8, 96, 16, 112);
+				} else if (i == 0) {
+						timer_init(timer3, &fifo, 1);
+						boxfill8(buf_back, binfo->scrnx, COL8_008484, 8, 96, 15, 111);
 				}
+				timer_settime(timer3, 50);
+				sheet_refresh(sht_back, 8, 96, 16, 112);
 			}
 		}
 	}

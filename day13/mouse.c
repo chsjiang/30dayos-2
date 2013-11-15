@@ -1,7 +1,13 @@
 #include "bootpack.h"
 
-void enable_mouse(struct MOUSE_DEC *mdec)
+struct FIFO32 *mousefifo;
+/* mouse data0 is offset, should be 512 here*/
+int mousedata0;
+
+void enable_mouse(struct FIFO32 *mousefifoArg, int data0, struct MOUSE_DEC *mdec)
 {
+	mousefifo = mousefifoArg;
+	mousedata0 = data0;
 	wait_KBC_sendready();
 	io_out8(PORT_KEYCMD, KEYCMD_SENDTO_MOUSE);
 	wait_KBC_sendready();
@@ -10,7 +16,7 @@ void enable_mouse(struct MOUSE_DEC *mdec)
 	return;
 }
 
-int mouse_decode(struct MOUSE_DEC *mdec, unsigned char dat)
+int mouse_decode(struct MOUSE_DEC *mdec, int dat)
 {
 	if( mdec->phase == 0 ) {
 		if(dat == 0xfa) {
@@ -51,4 +57,19 @@ int mouse_decode(struct MOUSE_DEC *mdec, unsigned char dat)
 		return 1;
 	}
 	return -1;
+}
+
+/* IRQ12 ： mouse, INT12 */
+void inthandler2c(int *esp)
+{
+	int data;
+	/* need to do OUT io to inform this interruption is already consumed, otherwise PIC will not continue listen to further interruption */
+	/* for mouse interruption, we need to inform both slave PIC and master PIC */
+	io_out8(PIC1_OCW2, 0x64);
+	io_out8(PIC0_OCW2, 0x62);
+	/* then get key data from keyboard port， keyboard port is sharing data from mouse port */
+	data = io_in8(PORT_KEYDAT);
+
+	fifo32_put(mousefifo, data + mousedata0);
+	return;
 }

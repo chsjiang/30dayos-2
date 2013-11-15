@@ -1,1 +1,2 @@
 refactor timer fifo and printf function, also slightly modify the counter to compare performance
+also use one fifo for timer/keyboard/mouse signals, this makes performance way faster

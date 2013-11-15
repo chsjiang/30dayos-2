@@ -109,9 +109,7 @@ struct KEYBUF {
 };
 
 void init_pic(void);
-void inthandler21(int *esp);
 void inthandler27(int *esp);
-void inthandler2c(int *esp);
 #define PIC0_ICW1		0x0020
 #define PIC0_OCW2		0x0020
 #define PIC0_IMR		0x0021
@@ -133,6 +131,19 @@ struct FIFO8 {
 	int start, end, size, full, flag;
 };
 
+/* 
+	we want to use a fifo for all types of interruptions
+	by using differernt range for differernt int
+		0-255: timer signal
+		255-511: keyboard signal
+		512-up: mouse signal
+	so we need a longer *data
+*/
+struct FIFO32 {
+	int *data;
+	int start, end, size, full, flag;
+};
+
 void fifo8_init(struct FIFO8 *fifo, int size, unsigned char* buf);
 
 int fifo8_put(struct FIFO8 *fifo, unsigned char data);
@@ -141,6 +152,14 @@ int fifo8_get(struct FIFO8 *fifo);
 
 int fifo8_status(struct FIFO8 *fifo);
 
+void fifo32_init(struct FIFO32 *fifo, int size, int* buf);
+
+int fifo32_put(struct FIFO32 *fifo, int data);
+
+int fifo32_get(struct FIFO32 *fifo);
+
+int fifo32_status(struct FIFO32 *fifo);
+
 /* keyboard.c */
 #define PORT_KEYDAT				0x0060
 #define PORT_KEYSTA				0x0064
@@ -148,20 +167,21 @@ int fifo8_status(struct FIFO8 *fifo);
 #define KEYSTA_SEND_NOTREADY	0x02
 #define KEYCMD_WRITE_MODE		0x60
 #define KBC_MODE				0x47
-extern struct FIFO8 keyfifo;
 void wait_KBC_sendready(void);
-void init_keyboard(void);
+void init_keyboard(struct FIFO32 *argKeyfifo, int data0);
+void inthandler21(int *esp);
 
 /* mouse.c */
 struct MOUSE_DEC {
 	unsigned char buf[3], phase;
 	int x, y, btn;
 };
+
 #define KEYCMD_SENDTO_MOUSE		0xd4
 #define MOUSECMD_ENABLE			0xf4
-extern struct FIFO8 mousefifo;
-void enable_mouse(struct MOUSE_DEC *mdec);
-int mouse_decode(struct MOUSE_DEC *mdec, unsigned char dat);
+void enable_mouse(struct FIFO32 *mousefifoArg, int data0, struct MOUSE_DEC *mdec);
+int mouse_decode(struct MOUSE_DEC *mdec, int dat);
+void inthandler2c(int *esp);
 
 /* memory.c */
 #define MEMMAN_FREES 		4090	/* around 32K */
@@ -231,8 +251,8 @@ void sheet_free(struct SHEET *sht);
 #define MAX_TIMER	500
 struct TIMER {
 	unsigned int timeout, flags;
-	struct FIFO8 *fifo;
-	unsigned char data;
+	struct FIFO32 *fifo;
+	int data;
 };
 
 struct TIMERCTL {
@@ -247,5 +267,5 @@ void init_pit(void);
 void inthandler20(int* esp);
 struct TIMER *timer_alloc(void);
 void timer_free(struct TIMER *timer);
-void timer_init(struct TIMER *timer, struct FIFO8 *timerfifo, unsigned char data);
+void timer_init(struct TIMER *timer, struct FIFO32 *timerfifo, int data);
 void timer_settime(struct TIMER *timer, unsigned int timeout);

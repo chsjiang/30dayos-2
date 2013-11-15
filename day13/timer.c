@@ -47,7 +47,7 @@ void timer_free(struct TIMER *timer) {
 
 /* by interchangably setting data to 0 and 1, and checking data as 0 or 1, 
 	we can set an infinite loop that monitors a flashing cursor */
-void timer_init(struct TIMER *timer, struct FIFO8 *timerfifo, unsigned char data) {
+void timer_init(struct TIMER *timer, struct FIFO32 *timerfifo, int data) {
 	timer->fifo = timerfifo;
 	timer->data = data;
 	return;
@@ -99,7 +99,7 @@ void inthandler20(int *esp) {
 			break;	
 		}
 		timerctl.timers[i]->flags = TIMER_FLAGS_ALLOC;
-		fifo8_put(timerctl.timers[i]->fifo, timerctl.timers[i]->data);
+		fifo32_put(timerctl.timers[i]->fifo, timerctl.timers[i]->data);
 	}
 	timerctl.using -= i;
 	/* remove the first i time out timers, offset the rest to top(if at all) */
