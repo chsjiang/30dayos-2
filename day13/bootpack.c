@@ -127,13 +127,11 @@ void HariMain(void)
 			io_sti();
 			/* keyboard signal */
 			if( i >= 256 && i < 512) {
-				debug(sht_back);
 				sprintf(buffer, "%02X", i - 256);
 				putfonts8_asc_sht(sht_back, 0, 16, COL8_FFFFFF, COL8_008484, buffer, 2);
 			}
 			/* mouse signal */
 			else if ( i >= 512 && i <= 767) {
-				debug(sht_back);
 
 				if(mouse_decode(&mdec, i - 512) != 0) {
 					sprintf(buffer, "[lcr %4d %4d]", mdec.x, mdec.y);
