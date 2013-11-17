@@ -1,0 +1,2 @@
+day 14: bump up resolution, need to configure VBE
+Also create an array to map keyboard data to chars, implement a little input text area, enable window moving by calling sht_slide
