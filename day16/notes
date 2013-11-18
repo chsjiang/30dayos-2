@@ -1,0 +1,1 @@
+day 16: parameterize multitasks by having a taskctl to mainaint a list of tasks
