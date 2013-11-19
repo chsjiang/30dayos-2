@@ -40,7 +40,7 @@ struct TASK *task_alloc(void) {
 		/* find the first available task */
 		if(taskctl->tasks0[i].flags == 0) {
 			task = &taskctl->tasks0[i];
-			task->flags = 1; /* allocated */
+			task->flags = 1; /* allocated, might be sleeping! */
 
 			/* arbitrary numbers */
 			task->tss.eflags = 0x00000202; /* IF = 1; */
@@ -64,6 +64,8 @@ struct TASK *task_alloc(void) {
 	return 0;
 }
 
+/* add a task to running tasks, note we can add a task even if it's removed but still initilalized 
+	in which case it will be resume from previous status: this is suspend/resume */
 void task_run(struct TASK* task) {
 	task->flags = 2;
 	taskctl->tasks[taskctl->running] = task;
@@ -79,6 +81,48 @@ void task_switch(void) {
 		/* looping through all running tasks */
 		taskctl->now = (taskctl->now + 1) % (taskctl->running);
 		farjmp(0, taskctl->tasks[taskctl->now]->sel);
+	}
+	return;
+}
+
+void task_sleep(struct TASK *task) {
+	/* if the task is running then we remove it from running buffer and mark it as not running */
+	if(task->flags == 2) {
+		int i;
+		char ts = 0;
+		/* 
+			if when taks_sleep(task) is called, task is not being executed
+				then we just need to change running and now, 
+				the round robin loop will continue running
+				the next task will be executed upon the 20 ms timer times out
+			if task IS being executed, we need to explicitly farjmp() to another unsleeping task
+				because taskctl->now might get screwed up!
+		*/
+		if(task == taskctl->tasks[taskctl->now]) {
+			ts = 1;
+		}
+		/* looking for the task to sleep */
+		for(i = 0; i < taskctl->running; i++) {
+			if(taskctl->tasks[i] == task) {
+				break;
+			}
+		}
+		taskctl->running--;
+		/* we removed a task before now, need to move now one block back to point to the task it was pointing to */
+		if(i < taskctl->now) {
+			taskctl->now--;
+		}
+
+		for(; i < taskctl->running; i++) {
+			taskctl->tasks[i] = taskctl->tasks[i+1];
+		}
+		task->flags = 1;
+		if(ts != 0) {
+			if(taskctl->now >= taskctl->running) {
+				taskctl->now = 0;
+			}
+			farjmp(0, taskctl->tasks[taskctl->now]->sel);
+		}
 	}
 	return;
 }

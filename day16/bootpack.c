@@ -46,7 +46,7 @@ void HariMain(void)
 	io_out8(PIC1_IMR, 0xef); /*mouse:11101111*/
 
 	/* now we only have one fifo for handling all signals */
-	fifo32_init(&fifo, 128, fifobuf);
+	fifo32_init(&fifo, 128, fifobuf, 0);
 
 	/* initliaze timers */
 	timer = timer_alloc();
@@ -136,9 +136,11 @@ void HariMain(void)
 			task controller will round robin the running tasks
 		when the second task is added, task controller will end up run each task for 20 mili
 	************/
-	struct TASK *task_b;
+	struct TASK *task_a, *task_b;
 	/* tasks_init will create first task and load task register the value of the first selector */
-	task_init(memman);
+	task_a = task_init(memman);
+	fifo.task = task_a;
+
 	task_b = task_alloc();
 	/* give task_b 64k stack size */
 	task_b->tss.esp = memman_alloc_4k(memman, 64 * 1024) + 64 * 1024 - 8;
@@ -159,7 +161,12 @@ void HariMain(void)
 		io_cli();
 		/* use unbounded buffer shared by timer/keyboard/mouse */
 		if(fifo32_status(&fifo) == 0) {
-			io_stihlt();
+			task_sleep(task_a);
+			/* 
+				when task_a is waked up, it will start from here
+				firs thing to to upon waking up is to enable interruption
+			*/
+			io_sti();
 		} else {
 			i = fifo32_get(&fifo);
 			io_sti();
@@ -343,7 +350,7 @@ void task_b_main(void) {
 	int i, fifobuf[128], count = 0, count0 = 0;
 	char buffer[12];
 
-	fifo32_init(&fifo, 128, fifobuf);
+	fifo32_init(&fifo, 128, fifobuf, 0);
 	timer_put = timer_alloc();
 	timer_init(timer_put, &fifo, 1);
 	timer_settime(timer_put, 1);
