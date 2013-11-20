@@ -245,7 +245,8 @@ _taskswitch3:
 _taskswitch4:							; void taskswitch4(void);
 		JMP 	4*8:0
 		RET
-
+; JMP FAR will first read 4 bytes from the address given to write to eip
+; then continues read 2 bytes to write to cs, which we passed as [ESP+8]
 _farjmp:								; farjmp(int eip, int cs);
 		JMP 	FAR [ESP+4];			; eip, cs
 		RET

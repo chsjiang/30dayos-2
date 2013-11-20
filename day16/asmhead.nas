@@ -3,9 +3,11 @@
 
 [INSTRSET "i486p"]
 
-VBEMODE EQU 	0x101			; 0x101: 640 x 480 mode
-								; 0x103: 800 x 600 mode
-								; 0x105: 1024 x 768 mode								
+VBEMODE EQU 	0x103			; 0x101: 640 x 480 x 8bit  mode
+								; 0x103: 800 x 600 x 8bit  mode
+								; 0x105: 1024 x 768 x 8bit  mode
+								; 0x107: 1280 x 1024 x 8bit mode
+								; 		 not supported, will be back to 320 x 200 mode
 
 BOTPAK	EQU		0x00280000		; bootpack will be copied to this address
 DSKCAC	EQU		0x00100000		; 1MB

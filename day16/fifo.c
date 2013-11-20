@@ -33,7 +33,7 @@ int fifo32_put(struct FIFO32 *fifo, int data)
 	   be impacted by mtask
 	    
 	   ALL TASK ARE DRIVEN BY one of the three INTERRUPTIONs!!
-	   that said, if there's on interruption, we can make a task sleep.
+	   that said, if there's no interruption, we can make a task sleep.
 	   that said, if a task is at sleep, the time we need to wake it up,
 	   	is the time when an interruption regarding this task happens.
 	   since fifo32_put() is the entry point of a interruption, we can 
