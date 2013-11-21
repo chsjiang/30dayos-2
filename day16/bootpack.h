@@ -273,8 +273,16 @@ void timer_settime(struct TIMER *timer, unsigned int timeout);
 /*********
 	 mtask.c
 *********/
+/*
+	Some tasks have higher priority that when they are running(music, mousehandling etc.),
+		all other tasks need to wait.
+	Therefore we implement levels, the higher the level, the more important the task.
+	OS will only exeute lower tasks when all upper level are empty
+*/
 #define		MAX_TASKS	1000 /* max tasks number */
 #define 	TASK_GDT0 	3 /* selector starts from 3, the first two are already occupied */
+#define     MAX_TASKS_LV	100 /* maximum 100 tasks in one level */
+#define 	MAX_TASKLEVELS 	10  /* maximum 10 levels */
 /* 
 	TSS is task status segment, used for representing a status of a task
 	a taks segment will be registered in GDT.
@@ -299,14 +307,20 @@ struct TSS32 {
 struct TASK {
 	int sel; /* sel is the index of the task in taskctl */
 	int flags;
+	int level, priority; /* each task will get a time slice task->priority * 10 ms to run */
 	struct TSS32 tss;
 };
 
+struct TASKLEVEL {
+	int running; /* number of running tasks at this level */
+	int now; /* current running task */
+	struct TASK *tasks[MAX_TASKS_LV];
+};
+
 struct TASKCTL  {
-	int running; /* how many tasks are running? */
-	int now; /* index of the current running task */
-	/* this is the pointer for all RUNNING tasks */
-	struct TASK *tasks[MAX_TASKS];
+	int now_lv; /* current active level */
+	char lv_change; /* is current active level changed? */
+	struct TASKLEVEL level[MAX_TASKLEVELS];
 	struct TASK tasks0[MAX_TASKS];
 };
 
@@ -314,6 +328,10 @@ extern struct TIMER *task_timer;
 
 struct TASK *task_init(struct MEMMAN *memman);
 struct TASK *task_alloc(void);
-void task_run(struct TASK* task);
+void task_run(struct TASK* task, int level, int priority);
 void task_switch(void);
 void task_sleep(struct TASK *task);
+struct TASK *task_now(void);
+void task_add(struct TASK *task);
+void task_remove(struct TASK *task);
+void task_switchsub(void);

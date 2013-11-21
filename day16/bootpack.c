@@ -68,6 +68,9 @@ void HariMain(void)
 	/* tasks_init will create first task and load task register the value of the first selector */
 	task_a = task_init(memman);
 	fifo.task = task_a;
+	/* change task_a's priority */
+	task_run(task_a, 1, 0);
+
 	
 	/* initilize keyboard and mouse*/
 	init_keyboard(&fifo, 256);
@@ -129,7 +132,7 @@ void HariMain(void)
 		task_b[i]->tss.ds = 1 * 8;
 		task_b[i]->tss.fs = 1 * 8;
 		task_b[i]->tss.gs = 1 * 8;
-		task_run(task_b[i]);
+		task_run(task_b[i], 2, i+1);
 	}
 
 	/*

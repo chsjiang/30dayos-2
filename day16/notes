@@ -1,3 +1,8 @@
 day 16: parameterize multitasks by having a taskctl to mainaint a list of tasks
 for multi tasks, sleep a task when it's not active by removing it from multi task round robin buffer
 when a interruption of a task is generaeted and handled in fifo32_put(), wake up the corresponding task, this nearly doubles performance
+for multi task, we implement a level strucure, the higher the level is, the more important its tasks are.
+Some tasks have higher priority that when they are running(music, mousehandling etc.),
+		all other tasks need to wait.
+	Therefore we implement levels, the higher the level, the more important the task.
+	OS will only exeute lower tasks when all upper level are empty
