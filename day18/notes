@@ -1,0 +1,2 @@
+day18
+control cursor, only display it when the window gets focus, note a windows unfocused doesn't mean it's sleep, it's still up and running, the timer signal to control cursor flashing is still pumping up every 0.5 seconds, all we need to do when it's unfocused is to not redraw cursor when a timer signal arrives.
