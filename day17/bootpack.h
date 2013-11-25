@@ -308,6 +308,7 @@ struct TASK {
 	int sel; /* sel is the index of the task in taskctl */
 	int flags;
 	int level, priority; /* each task will get a time slice task->priority * 10 ms to run */
+	struct FIFO32 fifo; /* each task has a fifo to store interruption signals */
 	struct TSS32 tss;
 };
 
