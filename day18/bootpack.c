@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "bootpack.h"
 
 #define		KEYCMD_LED 		0xed
@@ -10,7 +11,31 @@ void make_textbox8(struct SHEET *sht, int x0, int y0, int sx, int sy, int c);
 void debug();
 void console_task(struct SHEET *sheet);
 
+/*
+	microsoft defined file format, when we burn the image, 
+	the files crunched into the img(haribote.sys, ipl10.nas, Makefile)
+	are stored in the img file with the following format
+
+*/
+struct FILEINFO {
+	/*
+		name and extention
+		name[0]: 0x00 empty
+				 0xef deleted
+		type: 0x01: readonly
+			  0x02: hidden file
+			  0x04: sys file
+			  0x08: non-file info( disk name etc. )
+			  0x10: dir
+	*/
+	unsigned char name[8], ext[3], type;
+	char reserve[10];
+	unsigned short time, date, clustno;
+	unsigned int size;
+};
+
 struct SHEET *sht_back;
+unsigned int memtotal;
 
 void HariMain(void)
 {	
@@ -46,7 +71,6 @@ void HariMain(void)
 	init_screen8(binfo->vram, binfo->scrnx, binfo->scrny);	
 
 	int mx, my, i = 0;
-	unsigned int memtotal;
 	/* keycmd is a small buffer to switch status of Capslock, Numlock and ScrLock */
 	struct FIFO32 fifo, keycmd;
 	/* mouse is generating way more interruption than key, therefore we bump up the s to 128 */
@@ -179,11 +203,11 @@ void HariMain(void)
 	
 	/* note: now all color data can be written to buf_back, sheet_refresh() will traslate this to vram */
 	/* print cursor coordinates */	
-	sprintf(s, "(%3d, %3d)", mx, my);
-	putfonts8_asc(buf_back, binfo->scrnx, 0, 0, COL8_FFFFFF, s);
+	// sprintf(s, "(%3d, %3d)", mx, my);
+	// putfonts8_asc(buf_back, binfo->scrnx, 0, 0, COL8_FFFFFF, s);
 	/* print memory */
-	sprintf(s, "memory %dMB    free : %dKB", memtotal/(1024 * 1024), memman_total(memman)/1024);
-	putfonts8_asc(buf_back, binfo->scrnx, 0, 32, COL8_FFFFFF, s);
+	// sprintf(s, "memory %dMB    free : %dKB", memtotal/(1024 * 1024), memman_total(memman)/1024);
+	// putfonts8_asc(buf_back, binfo->scrnx, 0, 32, COL8_FFFFFF, s);
 	/* 
 		each time we call sheet_refresh, we need to know which sheet we're redrawing and the area to be redrawn 
 		this call is only fro redrawing the three lines of text
@@ -242,8 +266,8 @@ void HariMain(void)
 			io_sti();
 			/* keyboard signal */
 			if( i >= 256 && i < 512) {
-				sprintf(s, "%02X", i - 256);
-				putfonts8_asc_sht(sht_back, 0, 16, COL8_FFFFFF, COL8_008484, s, 2);
+				// sprintf(s, "%02X", i - 256);
+				// putfonts8_asc_sht(sht_back, 0, 16, COL8_FFFFFF, COL8_008484, s, 2);
 				/* if this is a valid char, we transfer it according shift_key status */
 				if( i < 0x80 + 256 ) {
 					if( key_shift == 0 ) {
@@ -386,17 +410,17 @@ void HariMain(void)
 				if(mouse_decode(&mdec, i - 512) != 0) {
 					sprintf(s, "[lcr %4d %4d]", mdec.x, mdec.y);
 					/* note: unless we realase a button, the mdec.btn mask will always be set and letter will alawys be captial */
-					if((mdec.btn & 0x01) != 0) {
-						s[1] = 'L';
-					}
-					if((mdec.btn & 0x02) != 0) {
-						s[3] = 'R';
-					}
-					if((mdec.btn & 0x04) != 0) {
-						s[2] = 'C';
-					}
+					// if((mdec.btn & 0x01) != 0) {
+					// 	s[1] = 'L';
+					// }
+					// if((mdec.btn & 0x02) != 0) {
+					// 	s[3] = 'R';
+					// }
+					// if((mdec.btn & 0x04) != 0) {
+					// 	s[2] = 'C';
+					// }
 					/* redraw which key is pressed */
-					putfonts8_asc_sht(sht_back, 32, 16, COL8_FFFFFF, COL8_008484, s, 15);
+					// putfonts8_asc_sht(sht_back, 32, 16, COL8_FFFFFF, COL8_008484, s, 15);
 
 					/* move mouse */
 					mx += mdec.x;
@@ -417,8 +441,8 @@ void HariMain(void)
 					if(my > binfo->scrny - 1) {
 						my = binfo->scrny - 1;
 					}
-					sprintf(s, "(%3d, %3d)", mx, my);
-					putfonts8_asc_sht(sht_back, 0, 0, COL8_FFFFFF, COL8_008484, s, 10);
+					// sprintf(s, "(%3d, %3d)", mx, my);
+					// putfonts8_asc_sht(sht_back, 0, 0, COL8_FFFFFF, COL8_008484, s, 10);
 					/* redraw cursor */
 					/* 
 						offset the mouse layer and repaint, note sheet_slide will only repaint the mouse layer-
@@ -551,6 +575,35 @@ void make_textbox8(struct SHEET *sht, int x0, int y0, int sx, int sy, int c)
 }
 
 /* 
+	start a new line, append/scroll when necessary 
+	eventually each command is also appending line by line 
+	use this method whenever a line break is required
+*/
+int cons_newline(int cursor_y, struct SHEET *sheet) {
+	int x, y;
+	/* if we're note at bottom line, add a new line */
+	if( cursor_y < 28 + 112 ) {
+		cursor_y += 16;
+	} 
+	/* otherwise offset line (2:n) to line (1:n-1) and draw new line at bottom */
+	else {
+		for(y = 28; y < 28 + 112; y++) {
+			for(x = 8; x < 240; x++) {
+				sheet->buf[x + y*sheet->bxsize] = sheet->buf[x + (y+16) * sheet->bxsize];
+			}
+		}
+		/* clear the last line */
+		for(y = 28 + 112; y < 28 + 128; y++) {
+			for(x = 8; x < 240; x++) {
+				sheet->buf[x + y*sheet->bxsize] = COL8_000000;
+			}
+		}
+		sheet_refresh(sheet, 8, 28, 8+240, 28+128);
+	}
+	return cursor_y;
+}
+
+/* 
 	start a task that runs a console 
 	a task needs a timer for flashing cursor
 	a fifo for transferring int data
@@ -567,10 +620,16 @@ void console_task(struct SHEET *sheet) {
 	timer = timer_alloc();
 	timer_init(timer, &task->fifo, 1);
 	timer_settime(timer, 50);
-	char s[2];
+	/* cmdline is used to buffer the info we input in command */
+	char s[30], cmdline[30];
+	struct MEMMAN *memman = (struct MEMMAN *) MEMMAN_ADDR;
+	/* from 0x002600 of the img addr, file info are stored, when copied to disk, we need to offset disk starting address */
+	struct FILEINFO *finfo = (struct FILEINFO *)(ADR_DISKIMG + 0x002600);
+
+	int x, y;
 
 	/* PS1 */
-	putfonts8_asc_sht(sheet, 9, cursor_y, COL8_FFFFFF, COL8_000000, "MLGB:>", 6);
+	putfonts8_asc_sht(sheet, 8, cursor_y, COL8_FFFFFF, COL8_000000, "MLGB:>", 6);
 
 	for(;;) {
 		io_cli();
@@ -618,19 +677,84 @@ void console_task(struct SHEET *sheet) {
 				} 
 				/* enter key, do line break */
 				else if( i == 256 + 10 )  {
-					/* now we can't scroll a screen... */
-					if( cursor_y < 28 + 112 ) {
-						/* clear current cursor */
-						putfonts8_asc_sht(sheet, cursor_x, cursor_y, COL8_FFFFFF, COL8_000000, " ", 1);
-						cursor_y += 16;
-						putfonts8_asc_sht(sheet, 9, cursor_y, COL8_FFFFFF, COL8_000000, "MLGB:>", 6);
-						cursor_x = 56;
+					/* clear current cursor */
+					putfonts8_asc_sht(sheet, cursor_x, cursor_y, COL8_FFFFFF, COL8_000000, " ", 1);
+					/* 
+						finish collecting a command input, add 0 to terminate c style string 
+						we add this in case string like 'memmlgb' is also parsed as valid command
+					*/
+					cmdline[cursor_x/8-7] = 0;
+					/* do line break */
+					cursor_y = cons_newline(cursor_y, sheet);
+					/* if input is 'mem' then execute the command */
+					if(strcmp(cmdline, "mem") == 0) {
+						/* memtotal is in byte */
+						sprintf(s, "total %dMB", memtotal/1024/1024);
+						putfonts8_asc_sht(sheet, 8, cursor_y, COL8_FFFFFF, COL8_000000, s, 30);
+						cursor_y = cons_newline(cursor_y, sheet);
+						sprintf(s, "free %dKB", memman_total(memman)/1024);
+						putfonts8_asc_sht(sheet, 8, cursor_y, COL8_FFFFFF, COL8_000000, s, 30);
+						cursor_y = cons_newline(cursor_y, sheet);
+						/* add an additional line break*/
+						cursor_y = cons_newline(cursor_y, sheet);
 					}
+					/* clean entire screen! */
+					else if(strcmp(cmdline, "cls") == 0) {
+						for(y = 28; y < 28 + 128; y++) {
+							for(x = 8; x < 240; x++) {
+								sheet->buf[x + y*sheet->bxsize] = COL8_000000;
+							}
+						}
+						sheet_refresh(sheet, 8, 28, 8+240, 28+128);
+						cursor_y = 28;
+					}
+					/* display info of file that crunched with the img */
+					else if(strcmp(cmdline, "dir") == 0) {
+						/* can crunch up to 224 files with img */
+						for(x = 0; x < 224; x++) {
+							/* 0x00 is empty file */
+							if(finfo[x].name[0] == 0x00) {
+								break;
+							}
+							/* 
+								if it's not deleted, then it's a valid file/dir 
+								note if it's not empty then it will be parsed as a valid character
+							*/
+							if(finfo[x].name[0] != 0xe5) {
+								/* if it's not dir or non-file info( if it's a file) */
+								if((finfo[x].type & 0x18) == 0) {
+									sprintf(s, "filename.ext  %7d", finfo[x].size);
+									/* since file name and ext length are fixed, we can replace them in s afterwards */
+									for(y = 0; y < 8; y++) {
+										s[y] = finfo[x].name[y];
+									}
+									for(y = 9; y < 12; y++) {
+										s[y] = finfo[x].ext[y-9];
+									}
+									putfonts8_asc_sht(sheet, 8, cursor_y, COL8_FFFFFF, COL8_000000, s, 30);
+									cursor_y = cons_newline(cursor_y, sheet);
+								}
+							}
+						}
+						cursor_y = cons_newline(cursor_y, sheet);
+					}
+					/* otherwise if it's not a blank line, shout*/
+					else if(cmdline[0] != 0) {
+						putfonts8_asc_sht(sheet, 8, cursor_y, COL8_FFFFFF, COL8_000000, "MLGB! Invalid Command!", 22);
+						cursor_y = cons_newline(cursor_y, sheet);
+						cursor_y = cons_newline(cursor_y, sheet);
+					}
+
+					/* PS1 */
+					putfonts8_asc_sht(sheet, 8, cursor_y, COL8_FFFFFF, COL8_000000, "MLGB:>", 6);
+					cursor_x = 56;
 				} else {
 					/* regular chars, append it */
 					if(cursor_x < 240) {
 						s[0] = i-256;
 						s[1] = 0;
+						/* buffer this char to cmdline, when enter is pressed, check buffered command */
+						cmdline[cursor_x/8-7] = i-256;
 						putfonts8_asc_sht(sheet, cursor_x, cursor_y, COL8_FFFFFF, COL8_000000, s, 1);
 						cursor_x += 8;
 					}

@@ -97,6 +97,8 @@ struct BOOTINFO {
 };
 /* setting base address of binfo will automatically set it's members in sequence, note binfo_scrnx = (short *) 0xff4; */
 #define ADR_BOOTINFO	0x00000ff0
+/* disk img is copied to memory from 0x00100000 */
+#define ADR_DISKIMG		0x00100000
 
 /* int.c */
 /* KEYBUF is used to buffer a key value when interruption happens, 

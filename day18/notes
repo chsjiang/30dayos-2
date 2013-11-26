@@ -1,2 +1,7 @@
 day18
 control cursor, only display it when the window gets focus, note a windows unfocused doesn't mean it's sleep, it's still up and running, the timer signal to control cursor flashing is still pumping up every 0.5 seconds, all we need to do when it's unfocused is to not redraw cursor when a timer signal arrives.
+parse input to cmd, use strcmp("ml", "gn") to compare input command
+currently we support three commands:
+cls, mem and dir
+mem will call memman_total() and display(draw the info) to cmd
+dir displays the file crunched with the system img, when combined together, the file info are alraedy written to disk with microsoft predefined format( see struct FILEINFO ), we just need to use the disk offset( disk memory offset we start to write floppy data(img data)) and the and the floppy address that starts to store file info, then it's possible to pinpoint the place where FILEINFOs begin to be stored and get the file infomation

@@ -90,7 +90,12 @@ hankaku.obj : hankaku.bin Makefile
 # meaning the system image file is complete now, it has both ipl10 and system file	
 # sys img will be 'concatenated' to ipl10
 haribote.img : ipl10.bin haribote.sys Makefile
-	$(EDIMG) imgin:../z_tools/fdimg0at.tek wbinimg src:ipl10.bin len:512 from:0 to:0 copy from:haribote.sys to:@: imgout:haribote.img
+	$(EDIMG) imgin:../z_tools/fdimg0at.tek \
+		wbinimg src:ipl10.bin len:512 from:0 to:0 \
+		copy from:haribote.sys to:@: \
+		copy from:ipl10.nas to:@: \
+		copy from:Makefile to:@: \
+		imgout:haribote.img
 
 img:
 	make haribote.img
