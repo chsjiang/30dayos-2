@@ -339,3 +339,53 @@ void task_add(struct TASK *task);
 void task_remove(struct TASK *task);
 void task_switchsub(void);
 void task_idle(void);
+
+/*********
+	window.c
+*********/
+void make_window8(unsigned char* buf, int xsize, int ysize, char *title, char act);
+void make_wtitle8(unsigned char* buf, int xsize, char *title, char act);
+void putfonts8_asc_sht(struct SHEET *sht, int x, int y, int c, int b, char*s, int l);
+void make_textbox8(struct SHEET *sht, int x0, int y0, int sx, int sy, int c);
+
+/*********
+	console.c
+*********/
+void console_task(struct SHEET *sheet, unsigned int memtotal);
+int cons_newline(int cursor_y, struct SHEET *sheet);
+
+/*********
+	file.c
+*********/
+/*
+	microsoft defined file format, when we burn the image, 
+	the files crunched into the img(haribote.sys, ipl10.nas, Makefile)
+	are stored in the img file with the following format
+	the struct is 32bytes
+*/
+struct FILEINFO {
+	/*
+		name and extention
+		name[0]: 0x00 empty
+				 0xef deleted
+		type: 0x01: readonly
+			  0x02: hidden file
+			  0x04: sys file
+			  0x08: non-file info( disk name etc. )
+			  0x10: dir
+	*/
+	unsigned char name[8], ext[3], type;
+	char reserve[10];
+	/* 
+		clustno is clustor number
+		the actual content of file is stored at a start of a clustor, a clustor is 512 bytes,
+		and clustor 0 has address 0x003e00, so the (floppy)address of the file is
+			0x003e00 + 512 * clustno
+	*/
+	unsigned short time, date, clustno;
+	unsigned int size;
+};
+void file_readfat(int *fat, unsigned char *img);
+void file_loadfile(int clustno, int size, char *buf, int *fat, char *img);
+
+

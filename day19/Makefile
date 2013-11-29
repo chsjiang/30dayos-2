@@ -12,7 +12,7 @@ IMGTOL		= $(TOOLPATH)imgtol.com
 MAKEFONT	= $(TOOLPATH)makefont.exe
 BIN2OBJ		= $(TOOLPATH)bin2obj.exe
 
-OBJPACK		= bootpack.obj int.obj graphic.obj dsctbl.obj naskfunc.obj hankaku.obj fifo.obj keyboard.obj mouse.obj memory.obj sheet.obj timer.obj mtask.obj
+OBJPACK		= bootpack.obj int.obj graphic.obj dsctbl.obj naskfunc.obj hankaku.obj fifo.obj keyboard.obj mouse.obj memory.obj sheet.obj timer.obj mtask.obj window.obj console.obj file.obj
 
 # the idea is first compile asmhead.nas into a binary file asmhead.bin that is executable
 # then compile bootpack.c into a hrb file bootpack.hrb, hrb is executable byte code, so we can simply cancatenate asmhead.bin and bootpack.hrb in to the .sys byte code, then we can use the fdimg0at.tek tool to genereate  a .img file
@@ -58,6 +58,8 @@ asmhead.bin : asmhead.nas Makefile
 %.obj : %.nas Makefile
 	$(NASK) $*.nas $*.obj $*.lst
 
+hlt.hrb : hlt.nas Makefile
+	$(NASK) hlt.nas hlt.hrb hlt.lst
 
 ipl10.bin : ipl10.nas Makefile
 	$(NASK) ipl10.nas ipl10.bin ipl10.lst
@@ -89,12 +91,13 @@ hankaku.obj : hankaku.bin Makefile
 # Note from now on apart from ipl10.bin, we will also need haribote.sys file to build the img
 # meaning the system image file is complete now, it has both ipl10 and system file	
 # sys img will be 'concatenated' to ipl10
-haribote.img : ipl10.bin haribote.sys Makefile
+haribote.img : ipl10.bin haribote.sys hlt.hrb Makefile
 	$(EDIMG) imgin:../z_tools/fdimg0at.tek \
 		wbinimg src:ipl10.bin len:512 from:0 to:0 \
 		copy from:haribote.sys to:@: \
 		copy from:ipl10.nas to:@: \
 		copy from:Makefile to:@: \
+		copy from:hlt.hrb to:@: \
 		imgout:haribote.img
 
 img:
