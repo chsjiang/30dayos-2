@@ -1,0 +1,24 @@
+day 20: system api call
+	to provide an application(a file or function call that's not part of the system code), we need to provide system api for the application to use. Such as print strings etc.
+	To expose system api, register it as a particular interruption in idt.
+		since idt has 2^8 = 256 slots, but there're only 32 valid status, 
+		executing `INT 0x40` will invoke this 'interruption' and 
+		effectively call the asm_hrb_api function
+		application is responsible for pushing the params to be passed to a system call
+		to particular registers
+	after system api is completed, we can write a stand alone file and execute through system console, the invocation sequences are as follows:
+	
+				console.c::cmd_app()(segment 2) 
+					--> (far call)
+				hello.nas(segment 1003)
+					-*> (system interruption)
+				naskfunc.nas::_asm_hrb_api()(segment 2) 
+					-> (call)
+				console.c::hrb_api()(segment 2)
+					<- (ret)
+				naskfunc.nas::_asm_hrb_api()(segment 2)
+					<*- (IRETD)
+				hello.nas(segment 1003)
+					<-- (retf)
+				console.c::cmd_app()(segment 2) 
+	where console.c::hrb_api() is the place to check which api is being invoked(in register EDX) and which parameters are passed(in other regiseters if any) 
