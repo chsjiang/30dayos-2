@@ -1,0 +1,3 @@
+day 21 protect OS
+	an applicaion should not access OS segment(segment 2), in order to prevent this from happening, when registering an app to IDT, use attribue 0x60 to make this segment an application segment.
+	once an application (using application segnent) tries to access os segment(segment 2), an exception will be thrown, exception handling is in intreuurption handling, int 0d will handle this exception, print an error message and return to os that starts the applicaion(console.c:cmd_app())
