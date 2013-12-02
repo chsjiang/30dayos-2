@@ -1,0 +1,5 @@
+day22: application programming in C
+	first we add support more exception types, now we support int 0x0c(stack interruption, happens when a array in stack gets overflow accessed) and int 0x0d(general interruption, happens when applciaion tries to access system code), to add the handling, we just need to register the new type of int in dsctl.c, then defines the corresponding handling functions in naskfunc.nas and console.c, both exception will cause OS terminate the erroeous application
+	then we add another hot key combination shift+f1 to terminate an application(like ctrl+c in linux), to do this we add key check in bootpack.c to listen to the combination, when this combination happens and there is actually an application running, we terminate that application. This functionality can be used to terminate some spinning program(tho no bug to cause the interrutpion)
+	
+	
