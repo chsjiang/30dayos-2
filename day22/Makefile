@@ -60,12 +60,21 @@ asmhead.bin : asmhead.nas Makefile
 	$(NASK) $*.nas $*.obj $*.lst
 
 ######## applications that're written in assembly, need to use $(NASK) : app.nas -> app.hrb 
+######## after reading header info of .hrb file and assign data segment accordingly, 
+######## we can't do .nas->.hrb, should use create a .obj and use obj2bim, 
+######## this will put correct header to the hrb file
+######## i.e app.nas->app.obj->app.bim->app.hrb
 hello.hrb : hello.nas Makefile
 	$(NASK) hello.nas hello.hrb hello.lst
 
 hello2.hrb : hello2.nas Makefile
 	$(NASK) hello2.nas hello2.hrb hello2.lst
 
+hello5.bim : hello5.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:hello5.bim stack:1k map:hello5.map hello5.obj
+
+hello5.hrb : hello5.bim Makefile
+	$(BIM2HRB) hello5.bim hello5.hrb 0
 ########
 
 ######## applications that're written in c, need to use $(OBJ2BIM) and $(BIM2HRB) : 
@@ -104,6 +113,12 @@ hello3.bim : hello3.obj a_nask.obj Makefile
 hello3.hrb : hello3.bim Makefile
 	$(BIM2HRB) hello3.bim hello3.hrb 0 
 
+hello4.bim : hello4.obj a_nask.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:hello4.bim map:hello4.map hello4.obj a_nask.obj
+
+hello4.hrb : hello4.bim Makefile
+	$(BIM2HRB) hello4.bim hello4.hrb 0 
+
 ########
 
 ipl10.bin : ipl10.nas Makefile
@@ -136,7 +151,7 @@ hankaku.obj : hankaku.bin Makefile
 # Note from now on apart from ipl10.bin, we will also need haribote.sys file to build the img
 # meaning the system image file is complete now, it has both ipl10 and system file	
 # sys img will be 'concatenated' to ipl10
-haribote.img : ipl10.bin haribote.sys hello.hrb hello2.hrb a.hrb bug1.hrb bug2.hrb bug3.hrb hello3.hrb Makefile
+haribote.img : ipl10.bin haribote.sys hello.hrb hello2.hrb a.hrb bug1.hrb bug2.hrb bug3.hrb hello3.hrb hello4.hrb hello5.hrb Makefile
 	$(EDIMG) imgin:../z_tools/fdimg0at.tek \
 		wbinimg src:ipl10.bin len:512 from:0 to:0 \
 		copy from:haribote.sys to:@: \
@@ -149,6 +164,8 @@ haribote.img : ipl10.bin haribote.sys hello.hrb hello2.hrb a.hrb bug1.hrb bug2.h
 		copy from:bug2.hrb to:@: \
 		copy from:bug3.hrb to:@: \
 		copy from:hello3.hrb to:@: \
+		copy from:hello4.hrb to:@: \
+		copy from:hello5.hrb to:@: \
 		imgout:haribote.img
 
 img:

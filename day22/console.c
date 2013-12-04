@@ -374,6 +374,18 @@ int cmd_app(struct CONSOLE *cons, int *fat, char *cmdline) {
 
 	struct FILEINFO *finfo = file_search(name, (struct FILEINFO *)(ADR_DISKIMG + 0x002600), 224);
 
+	/*
+		each .hrb executable file has a 36 bytes header, it seperates data and code.
+		In order to get the correct address of data/vars defined inside the program,
+			we need to assign a new bunch of memory to store the data chunk and assign this chunk
+			of memory to a new segment to start the application
+		the following 4 fields describes the properties data, they are stored in the header of a valid hrb file
+		segsize: size of data segment
+		datsize: size of data chunk
+		dathub: starting address of data chunk
+		esp: stack pointer address, we can use this to pinpoint where data has been stored
+	*/
+	int segsize, datsize, esp, dathrb;
 
 	/* found the file */
 	if(finfo != 0) {
@@ -383,37 +395,9 @@ int cmd_app(struct CONSOLE *cons, int *fat, char *cmdline) {
 			finally we free that chunk of data
 		*/							
 		p = (char *)memman_alloc_4k(memman, finfo->size);
-		q = (char *)memman_alloc_4k(memman, 64 * 1024);
+		
 		/* add ADR_DISKIMG to convert the address of flopy to the address of disk */
 		file_loadfile(finfo->clustno, finfo->size, p, fat, (char *)0x003e00 + ADR_DISKIMG);
-		/* 
-			if it's a valid .hrb file, the 4th to 7th type would be "Hari"
-			.hrb is like .exe in windows, it's an application that's not part of os
-			we need to overwrite the first 6 bytes of the file so that it's the following assembly
-				CALL 	0x1b
-				RETF
-			where 0x1b is the address of the application's HariMain() function(entry point)
-		*/
-		if(finfo->size > 8 && strncmp(p+4, "Hari", 4) == 0) {
-			p[0] = 0xe8;
-			p[1] = 0x16;
-			p[2] = 0x00;
-			p[3] = 0x00;
-			p[4] = 0x00;
-			p[5] = 0xcb;
-		}
-		/* 
-			assign the starting address of the code block to a arbitrary address 0xfe8
-			we did this because when calling hrb_api(), 
-				the register values are the address of CURRENT SEGMENT
-			which effectively means we need to offset CS in order to get values from the registers
-			unless we can directly assign 'MOV AL,[CS:ECX]' as in hello.nas
-			
-			for all other application that's not able to assign CS, 
-			we need to offset CS address in hrb_api()
-			and p would be the CS address
-		*/
-		*((int *)0xfe8) = (int) p;
 		/* 
 			note: the new application shouldn't occupy any task(1-1000), 
 			we assign it 1003 to bypass taskmgr
@@ -441,29 +425,64 @@ int cmd_app(struct CONSOLE *cons, int *fat, char *cmdline) {
 					<-- (retf)
 				console.c::cmd_app()(segment 2) 
 		*/
-		/* 
-		   when adding 0x60 to access attr of a setment, this segment will be marked as application segment
-		   once an application segment tries to write to OS segment, 
-		 	an exception will be thrown by x86 archetecture
-		   in previous code, in order to avoid an application access OS segment, we backup/restore system status
-		    in the api call(_asm_hrh_api), but now with this eception in place, we don't need to do that - 
-		    once the os segment is modifed by an application segment with 0x60 set, an exception will be thrown
-		    all we need to to do in _asm_hrh_api is just passing the params without buffering anything
-		    and have interrutpion 0x0d keeping track of exceptions thrown, once an exception is thrown, 
-		    we just print error infomation and return to cmd_app(), so we avoid the malware from modifying os
-		*/
-		set_segmdesc(gdt + 1003, finfo->size - 1, (int)p, AR_CODE32_ER + 0x60);
-		/* we need to assign a dedicated data segment to the application to avoid it access system data */
-		set_segmdesc(gdt + 1004, 64 * 1024 - 1, (int)q, AR_DATA32_RW + 0x60);
+		
+		
+		if(finfo->size > 8 && strncmp(p+4, "Hari", 4) == 0) {
+			/* 
+				if it's a valid .hrb file, the 4th to 7th type would be "Hari"
+				.hrb is like .exe in windows, it's an application that's not part of os
+				we need to overwrite the first 6 bytes of the file so that it's the following assembly
+					CALL 	0x1b
+					RETF
+				where 0x1b is the address of the application's HariMain() function(entry point)
+				
+				BUT after using RETF to jump to the application, we don't need to modify
+				all Haribote applications' entry point is 0x1b, we directly set EIP to 0x1b
+				so there would be no need to modify the .hrb file
+			*/
+			segsize = *((int*)(p+0x0000));
+			esp = *((int*)(p+0x000c));
+			datsize = *((int*)(p+0x0010));
+			dathrb = *((int*)(p+0x0014));
+			/* allocate dedicated memory for data segment */
+			q = (char* )memman_alloc_4k(memman, segsize);
+			/* 
+				assign the starting address of the data block to a arbitrary address 0xfe8
+				we did this because when calling hrb_api(), 
+					the register values are the address of CURRENT SEGMENT
+				which effectively means we need to offset CS in order to get values from the registers
+				unless we can directly assign 'MOV AL,[CS:ECX]' as in hello.nas
+				
+				for all other application that's not able to assign CS, 
+				we need to offset CS address in hrb_api()
+				and p would be the CS address
+			*/
+			*((int *)0xfe8) = (int) q;
+			/* 
+			   when adding 0x60 to access attr of a setment, this segment will be marked as application segment
+			   once an application segment tries to write to OS segment, 
+			 	an exception will be thrown by x86 archetecture
+			   in previous code, in order to avoid an application access OS segment, we backup/restore system status
+			    in the api call(_asm_hrh_api), but now with this eception in place, we don't need to do that - 
+			    once the os segment is modifed by an application segment with 0x60 set, an exception will be thrown
+			    all we need to to do in _asm_hrh_api is just passing the params without buffering anything
+			    and have interrutpion 0x0d keeping track of exceptions thrown, once an exception is thrown, 
+			    we just print error infomation and return to cmd_app(), so we avoid the malware from modifying os
+			*/
+			set_segmdesc(gdt + 1003, finfo->size - 1, (int)p, AR_CODE32_ER + 0x60);
+			/* we need to assign a dedicated data segment to the application to avoid it access system data */
+			set_segmdesc(gdt + 1004, segsize - 1, (int)q, AR_DATA32_RW + 0x60);
+			/* according to file header, copy the data chunk to memory so that hrb_api would know correct vars*/
+			for(i = 0; i < datsize; i++) {
+				q[esp + i] = p[dathrb + i];
+			}
 
-		/* 
-			we need to change sys ESP to use dedicated register values for this application
-			so can't do farcall directly 
-		*/
-		/* farcall(0, 1003 * 8); */
-		start_app(0, 1003 * 8, 64 * 1024, 1004 * 8, &(task->tss.esp0));
+			start_app(0x1b, 1003 * 8, esp, 1004 * 8, &(task->tss.esp0));
+			memman_free(memman, (int) q, segsize);
+		} else {
+			cons_putstr0(cons, ".hrb file format error.\n");
+		}
 		memman_free(memman, (int) p, finfo->size);
-		memman_free(memman, (int) q, 64 * 1024);
 		cons_newline(cons);
 		return 1;
 	}
@@ -479,6 +498,7 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int 
 	/* we will assign the address of cons to 0x0fec(arbitrarily) */
 	struct CONSOLE *cons = (struct CONSOLE *) *((int*)0x0fec);
 	struct TASK *task = task_now();
+	char s[12];
 	/* get cs base from the abitrary address and off set to registers if necessary */
 	int cs_base = *((int *)0xfe8);
 	if (edx == 1) {
