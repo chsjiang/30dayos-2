@@ -119,6 +119,17 @@ hello4.bim : hello4.obj a_nask.obj Makefile
 hello4.hrb : hello4.bim Makefile
 	$(BIM2HRB) hello4.bim hello4.hrb 0 
 
+winhelo.bim : winhelo.obj a_nask.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:winhelo.bim map:winhelo.map winhelo.obj a_nask.obj
+
+winhelo.hrb : winhelo.bim Makefile
+	$(BIM2HRB) winhelo.bim winhelo.hrb 0 
+
+winhelo2.bim : winhelo2.obj a_nask.obj Makefile
+	$(OBJ2BIM) @$(RULEFILE) out:winhelo2.bim map:winhelo2.map winhelo2.obj a_nask.obj
+
+winhelo2.hrb : winhelo2.bim Makefile
+	$(BIM2HRB) winhelo2.bim winhelo2.hrb 0 
 ########
 
 ipl10.bin : ipl10.nas Makefile
@@ -151,7 +162,8 @@ hankaku.obj : hankaku.bin Makefile
 # Note from now on apart from ipl10.bin, we will also need haribote.sys file to build the img
 # meaning the system image file is complete now, it has both ipl10 and system file	
 # sys img will be 'concatenated' to ipl10
-haribote.img : ipl10.bin haribote.sys hello.hrb hello2.hrb a.hrb bug1.hrb bug2.hrb bug3.hrb hello3.hrb hello4.hrb hello5.hrb Makefile
+haribote.img : ipl10.bin haribote.sys hello.hrb hello2.hrb a.hrb bug1.hrb bug2.hrb bug3.hrb \
+				hello3.hrb hello4.hrb hello5.hrb winhelo.hrb winhelo2.hrb Makefile
 	$(EDIMG) imgin:../z_tools/fdimg0at.tek \
 		wbinimg src:ipl10.bin len:512 from:0 to:0 \
 		copy from:haribote.sys to:@: \
@@ -166,6 +178,8 @@ haribote.img : ipl10.bin haribote.sys hello.hrb hello2.hrb a.hrb bug1.hrb bug2.h
 		copy from:hello3.hrb to:@: \
 		copy from:hello4.hrb to:@: \
 		copy from:hello5.hrb to:@: \
+		copy from:winhelo.hrb to:@: \
+		copy from:winhelo2.hrb to:@: \
 		imgout:haribote.img
 
 img:

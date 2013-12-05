@@ -3,3 +3,21 @@ day22: application programming in C
 	then we add another hot key combination shift+f1 to terminate an application(like ctrl+c in linux), to do this we add key check in bootpack.c to listen to the combination, when this combination happens and there is actually an application running, we terminate that application. This functionality can be used to terminate some spinning program(tho no bug to cause the interrutpion)
 	
 	in order to avoid executing an invalid .hrb executable file, a file header is defined, and all hrb file contains two parts: data and code. when starting a .hrb applcation, we need to assign two segments, first for code and second for data. The data segment information are stored in in the header, we allocate a chunk of required memory and copy all data to those memory, and add a new segment on that memory. Failing to do so will cause the program not able to find the data or variables defined in the orgional program.	
+	
+	We also wrapped more functions to system interruption, now int 6 will display some chars on window and int 7 draws a box on a sheet
+
+ 	in console.c::hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax)
+		in order to return values to the function calling this interruption, we need to know the address of register and write value to that register 
+		
+		We did this by defining the folloing:		
+		int *reg =  &eax + 1,
+		reg points to the register values, since we have PUSHAD twice in asm_hrb_api, the stack will be like
+			-------------------------------------------------------------------------------
+			|eax->ecx->edx->ebx->esp->ebp->esi->edi->eax->ecx->edx->ebx->esp->ebp->esi->edi(ESP, stack head)
+			-------------------------------------------------------------------------------
+			high --------------------------------------------------------------------> low
+		therefore adding &eax one will point to the edi register we pushed in the first PUSHAD
+		we need this address to write some value back to registers 
+		so that the function calling sys interruption will get some return values in register
+		reg[0] : EDI,   reg[1] : ESI,   reg[2] : EBP,   reg[3] : ESP 
+		reg[4] : EBX,   reg[5] : EDX,   reg[6] : ECX,   reg[7] : EAX 	

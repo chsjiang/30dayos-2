@@ -92,6 +92,7 @@ void HariMain(void)
 	struct SHEET *sht_mouse, *sht_win, *sht_cons;
 	unsigned char *buf_back, buf_mouse[256], *buf_win, *buf_cons;
 	shtctl = shtctl_init(memman, binfo->vram, binfo->scrnx, binfo->scrny);
+	*((int *)0x0fe4) = (int)shtctl;
 	/* 
 		sht_back 
 	*/

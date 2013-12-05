@@ -497,23 +497,38 @@ int cmd_app(struct CONSOLE *cons, int *fat, char *cmdline) {
 int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int eax) {
 	/* we will assign the address of cons to 0x0fec(arbitrarily) */
 	struct CONSOLE *cons = (struct CONSOLE *) *((int*)0x0fec);
+	struct SHTCTL *shtctl = (struct SHTCTL *) *((int*)0x0fe4);
 	struct TASK *task = task_now();
 	char s[12];
+	struct SHEET *sht;
+	int *reg = &eax + 1;
+	/* 
+		reg points to the register values, since we have PUSHAD twice in asm_hrb_api, the stack will be like
+			-------------------------------------------------------------------------------
+			|eax->ecx->edx->ebx->esp->ebp->esi->edi->eax->ecx->edx->ebx->esp->ebp->esi->edi(ESP, stack head)
+			-------------------------------------------------------------------------------
+			high --------------------------------------------------------------------> low
+		therefore adding &eax one will point to the edi register we pushed in the first PUSHAD
+		we need this address to write some value back to registers 
+		so that the function calling sys interruption will get some return values in register
+		reg[0] : EDI,   reg[1] : ESI,   reg[2] : EBP,   reg[3] : ESP 
+		reg[4] : EBX,   reg[5] : EDX,   reg[6] : ECX,   reg[7] : EAX 
+	*/
 	/* get cs base from the abitrary address and off set to registers if necessary */
-	int cs_base = *((int *)0xfe8);
+	int ds_base = *((int *)0xfe8);
 	if (edx == 1) {
 		/* no.1: putchar, need to MOV the char to EAX */
 		cons_putchar(cons, eax & 0xff, 1);
 	} else if (edx == 2) {
 		/* no.2 cons_putstr0(struct CONSOLE *cons, char *s);
 			 need to MOV the address of str to EBX */
-		cons_putstr0(cons, (char *)ebx+cs_base);
+		cons_putstr0(cons, (char *)ebx+ds_base);
 	} else if (edx == 3) {
 		/* no.3 cons_putstr1(struct CONSOLE *cons, char *s, int l);
 			 need to MOV the address of str to EBX
 			 and length to ECX
 		*/
-		cons_putstr1(cons, (char *)ebx+cs_base, ecx);
+		cons_putstr1(cons, (char *)ebx+ds_base, ecx);
 	} else if (edx == 4) {
 		/* no.4 terminate the application, return the address to jump back to */
 		/* 
@@ -521,6 +536,24 @@ int *hrb_api(int edi, int esi, int ebp, int esp, int ebx, int edx, int ecx, int 
 		 will be handeled in naskfunc.nas::_asm_hrb_api::end_app 
 		*/
 		return &(task->tss.esp0);
+	} else if (edx == 5) {
+		/* no.5 creates a new window */
+		sht = sheet_alloc(shtctl);
+		sheet_setbuf(sht, (char *)ebx + ds_base, esi, edi, eax);
+		make_window8((char *)ebx + ds_base, esi, edi, (char *)ecx + ds_base, 0);
+		sheet_slide(sht, 100, 50);
+		sheet_updown(sht, 3);
+		reg[7] = (int)sht; /* return sht addr to EAX register */
+	} else if (edx == 6) {
+		/* no.6 display some chars on window */
+		sht = (struct SHEET *) ebx;
+		putfonts8_asc(sht->buf, sht->bxsize, esi, edi, eax, (char *)ebp + ds_base);
+		sheet_refresh(sht, esi, edi, esi + ecx * 8, edi + 16);
+	} else if (edx == 7) {
+		/* no.7 draw a box */
+		sht = (struct SHEET *) ebx;
+		boxfill8(sht->buf, sht->bxsize, ebp, eax, ecx, esi, edi);
+		sheet_refresh(sht, eax, ecx, esi + 1, edi + 1);
 	}
 	return 0;
 }
